@@ -1,0 +1,760 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                  String    @id @default(cuid())
+  name                String
+  role                Role      // Admin, FinanceManager, CEO, Technician, Receptionist, WarehouseManager, Accountant, BranchManager
+  phoneNumber         String    @unique // WhatsApp routing identifier
+  password            String    @default("")
+  lastLogin           DateTime?
+  branchId            String?
+  branch              Branch?   @relation(fields: [branchId], references: [id])
+  reportedRequests    Request[] @relation("ReporterRequests")
+  assignedRequests    Request[] @relation("AssigneeRequests")
+  shiftReports        ShiftReport[] @relation("ReporterRelation")
+  preserveHistory     Boolean   @default(true)
+  employeeType        EmployeeType @default(Fixed)  // "Fixed" | "Mobile"
+  attendanceLogs      AttendanceLog[]
+  annualLeaveBalance  Int       @default(21)  // days per year
+  sickLeaveBalance    Int       @default(14)
+  loanRequests        LoanRequest[]
+  leaveRequests       LeaveRequest[]
+  isAvailable         Boolean   @default(true)
+  reportedMaintenance MaintenanceRequest[] @relation("ReportedBy")
+  assignedMaintenance MaintenanceRequest[] @relation("AssignedTo")
+  warehouseRequestsMade    WarehouseRequest[]  @relation("WHRRequestedBy")
+  warehouseRequestsApproved WarehouseRequest[] @relation("WHRApprovedBy")
+  procurementsMade         ProcurementRequest[] @relation("PRORequestedBy")
+  procurementsReviewed     ProcurementRequest[] @relation("PROReviewedBy")
+  procurementsApproved     ProcurementRequest[] @relation("PROApprovedBy")
+  procurementsPurchased    ProcurementRequest[] @relation("PROPurchasedBy")
+  stockMovements           StockMovement[]
+  lostItemsReported    LostFoundItem[] @relation("LFReportedBy")
+  damageReportsReported DamageReport[] @relation("DMGReportedBy")
+  damageReportsReviewed DamageReport[] @relation("DMGReviewedBy")
+  documents           Document[] @relation("UploadedDocuments")
+  employeeDocuments   Document[] @relation("EmployeeDocuments")
+  transfers           EmployeeTransfer[] @relation("EmployeeTransfers")
+  attendanceRecords   AttendanceRecord[]
+  botEnabled          Boolean   @default(true)
+  email               String?
+  isActive            Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+model Branch {
+  id                  String               @id @default(cuid())
+  name                String
+  location            String?
+  users               User[]
+  requests            Request[]
+  inventoryItems      InventoryItem[]
+  shiftReports        ShiftReport[]        @relation("BranchRelation")
+  shifts              Shift[]
+  attendanceLogs      AttendanceLog[]
+  maintenanceRequests MaintenanceRequest[]
+  stockEntries        StockEntry[]
+  stockMovements      StockMovement[]
+  warehouseRequests   WarehouseRequest[]
+  procurementRequests ProcurementRequest[]
+  lostFoundItems   LostFoundItem[]
+  damageReports    DamageReport[]
+  documents        Document[]
+  attendanceRecords AttendanceRecord[]
+  transfersFrom       EmployeeTransfer[]   @relation("TransfersFrom")
+  transfersTo         EmployeeTransfer[]   @relation("TransfersTo")
+  loanRequests        LoanRequest[]
+  lat                 Float?
+  lng                 Float?
+  radiusMeters        Int                  @default(200)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+}
+
+model Request {
+  id              String         @id @default(cuid())
+  requestType     RequestType    // Maintenance, Warehouse, Procurement
+  status          RequestStatus  @default(Pending) // Pending, In_Progress, Awaiting_Confirmation, Completed, Rejected
+  branchId        String
+  branch          Branch         @relation(fields: [branchId], references: [id])
+  description     String         @db.Text
+  reporterId      String
+  reporter        User           @relation("ReporterRequests", fields: [reporterId], references: [id])
+  assignedToId    String?
+  assignedTo      User?          @relation("AssigneeRequests", fields: [assignedToId], references: [id])
+  estimatedCost   Float?
+  actualCost      Float?
+  beforeImageUrl  String?
+  afterImageUrl   String?
+  invoiceImageUrl String?
+  approvalStatus  ApprovalStatus @default(Approved) // Pending_Finance, Pending_CEO, Approved, Rejected
+  rating          Int?
+  rejectionReason String?        @db.Text
+  rejectionCount  Int            @default(0)
+  inventoryItemId String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model InventoryItem {
+  id             String          @id @default(cuid())
+  name           String
+  category       String
+  stockLevel     Int
+  reorderLevel   Int
+  status         InventoryItemStatus @default(Available) // Available, Out_of_Stock
+  branchId       String
+  branch         Branch          @relation(fields: [branchId], references: [id])
+  requests       Request[]
+  unitId         String?
+  unit           UnitOfMeasure?  @relation(fields: [unitId], references: [id])
+  stockAdditions StockAddition[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model SystemSettings {
+  id                         String   @id @default("global")
+  procurementApprovalThreshold Float    @default(5000.0)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+}
+
+model ShiftReport {
+  id                 String    @id @default(cuid())
+  createdAt          DateTime  @default(now())
+  reporterId         String
+  reporter           User      @relation("ReporterRelation", fields: [reporterId], references: [id])
+  branchId           String
+  branch             Branch    @relation("BranchRelation", fields: [branchId], references: [id])
+  shiftLabel         String    // e.g. "صباحي", "مسائي", "ليلي"
+  cashTotal          Float
+  cashExpenses       Float
+  cashNet            Float
+  visa               Float
+  mada               Float
+  mastercard         Float
+  gulfNet            Float
+  tabby              Float
+  bankTransfer       Float
+  grandTotal         Float
+  status             ShiftReportStatus @default(PendingAccountant)
+  rejectionReason    String?   @db.Text
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  shiftId            String?
+  shift              Shift?    @relation(fields: [shiftId], references: [id])
+  customStartTime    String?
+  customEndTime      String?
+  isManual           Boolean   @default(false)
+  manualEnteredBy    String?
+}
+
+model Shift {
+  id          String   @id @default(cuid())
+  name        String
+  startTime   String   // "07:00"
+  endTime     String   // "15:00"
+  branchId    String?  // null = applies to all branches
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+  isOpen      Boolean  @default(false) // true = وردية مفتوحة
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  ShiftReport ShiftReport[]
+  attendanceRecords AttendanceRecord[]
+}
+
+model AttendanceLog {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  branchId        String?
+  branch          Branch?  @relation(fields: [branchId], references: [id])
+  type            AttendanceLogType   // "CheckIn" | "CheckOut"
+  timestamp       DateTime @default(now())
+  lat             Float
+  lng             Float
+  distanceMeters  Float
+  isValid         Boolean
+  rejectionReason String?  @db.Text
+}
+
+model LoanRequest {
+  id              String    @id @default(cuid())
+  employeeId      String
+  user            User      @relation(fields: [employeeId], references: [id])
+  branchId        String
+  branch          Branch    @relation(fields: [branchId], references: [id])
+  amount          Float
+  reason          String    @db.Text
+  status          LoanStatus @default(Pending)  // "Pending" | "Approved" | "Rejected"
+  repaymentMonths Int       @default(1)
+  approvedBy      String?
+  approvedAt      DateTime?
+  notes           String?   @db.Text
+  createdAt       DateTime  @default(now())
+}
+
+model LeaveRequest {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  leaveType    LeaveType   // "Annual" | "Sick" | "Emergency" | "Unpaid"
+  startDate    DateTime
+  endDate      DateTime
+  daysCount    Int      // auto-calculated
+  reason       String   @db.Text
+  status       LeaveStatus @default(Pending)  // "Pending" | "Approved" | "Rejected"
+  reviewedBy   String?  // BranchManager or Admin userId
+  reviewNote   String?  @db.Text
+  reviewedAt   DateTime?
+  createdAt    DateTime @default(now())
+}
+
+model MaintenanceRequest {
+  id                String    @id @default(cuid())
+  ticketNumber      String    @unique // auto-generated: MNT-2026-0001
+  reportedBy        String    // userId
+  reporter          User      @relation("ReportedBy", fields: [reportedBy], references: [id])
+  branchId          String
+  branch            Branch    @relation(fields: [branchId], references: [id])
+  category          MaintenanceCategory    // "Electrical"|"Plumbing"|"AC"|"Carpentry"|"Cleaning"|"General"
+  location          String    // room number or place description
+  description       String    @db.Text
+  photoUrl          String?   // submitted photo URL
+  priority          MaintenancePriority @default(Normal) // "Urgent"|"High"|"Normal"|"Low"
+  status            MaintenanceStatus   @default(New)
+  // New|AssignedToTechnician|InProgress|PendingInternalApproval|SpareParts|Rejected|Closed
+  assignedTo        String?   // technician userId
+  technician        User?     @relation("AssignedTo", fields: [assignedTo], references: [id])
+  completionPhotoUrl String?  // photo uploaded by technician
+  completionNote    String?   @db.Text
+  rejectionReason   String?   @db.Text   // reason when internal supervisor rejects
+  rejectionCount    Int       @default(0)
+  assignedAt        DateTime?
+  completedAt       DateTime?
+  closedAt          DateTime?
+  closedBy          String?   // BranchManager or InternalSupervisor userId
+  supervisorNote    String?   @db.Text
+  sparePartsNeeded  Boolean   @default(false)
+  procurementId     String?   // linked ProcurementRequest id (future)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  timeline          MaintenanceTimeline[]
+}
+
+model MaintenanceTimeline {
+  id          String   @id @default(cuid())
+  requestId   String
+  request     MaintenanceRequest @relation(fields: [requestId], references: [id])
+  action      MaintenanceAction   // "Created"|"Assigned"|"Started"|"CompletionSubmitted"|"Approved"|"Rejected"|"Closed"|"SparePartsRequested"
+  performedBy String   // userId
+  note        String?  @db.Text
+  photoUrl    String?
+  createdAt   DateTime @default(now())
+}
+
+model ItemCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique // "مناشف" | "أدوات نظافة" | "قطع غيار" | "مستلزمات مكتبية" | "أغذية ومشروبات" | "عام"
+  description String?  @db.Text
+  items       Item[]
+  createdAt   DateTime @default(now())
+}
+
+model Item {
+  id           String       @id @default(cuid())
+  name         String
+  unit         String       // "قطعة" | "كيلو" | "لتر" | "علبة" | "رول" | "زوج"
+  categoryId   String
+  category     ItemCategory @relation(fields: [categoryId], references: [id])
+  description  String?      @db.Text
+  stockEntries StockEntry[]
+  movements    StockMovement[]
+  warehouseRequests WarehouseRequest[]
+  procurementRequests ProcurementRequest[]
+  createdAt    DateTime     @default(now())
+}
+
+model StockEntry {
+  id           String   @id @default(cuid())
+  itemId       String
+  item         Item     @relation(fields: [itemId], references: [id])
+  branchId     String
+  branch       Branch   @relation(fields: [branchId], references: [id])
+  quantity     Int      @default(0)
+  minThreshold Int      @default(5)  // trigger auto-procurement when below this
+  maxCapacity  Int      @default(100)
+  lastUpdated  DateTime @default(now())
+  @@unique([itemId, branchId])
+}
+
+model StockMovement {
+  id           String   @id @default(cuid())
+  itemId       String
+  item         Item     @relation(fields: [itemId], references: [id])
+  branchId     String
+  branch       Branch   @relation(fields: [branchId], references: [id])
+  type         StockMovementType   // "In"|"Out"|"Transfer"|"Adjustment"
+  quantity     Int      // positive=in, negative=out
+  reason       StockMovementReason   // "EmployeeRequest"|"MaintenanceRequest"|"AutoRestock"|"ManualAdjustment"|"Transfer"
+  referenceId  String?  // warehouseRequestId or maintenanceRequestId
+  performedBy  String
+  performer    User     @relation(fields: [performedBy], references: [id])
+  note         String?  @db.Text
+  createdAt    DateTime @default(now())
+}
+
+model WarehouseRequest {
+  id              String   @id @default(cuid())
+  ticketNumber    String   @unique // WHR-2026-0001
+  requestedBy     String
+  requester       User     @relation("WHRRequestedBy", fields: [requestedBy], references: [id])
+  branchId        String
+  branch          Branch   @relation(fields: [branchId], references: [id])
+  itemId          String
+  item            Item     @relation(fields: [itemId], references: [id])
+  quantityRequested Int
+  quantityIssued    Int     @default(0)
+  status          WarehouseRequestStatus   @default(Pending) // "Pending"|"Approved"|"Rejected"|"PartiallyApproved"
+  purpose         String?  @db.Text  // what it will be used for
+  approvedBy      String?
+  approver        User?    @relation("WHRApprovedBy", fields: [approvedBy], references: [id])
+  rejectionReason String?  @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model ProcurementRequest {
+  id              String   @id @default(cuid())
+  ticketNumber    String   @unique // PRO-2026-0001
+  requestedBy     String
+  requester       User     @relation("PRORequestedBy", fields: [requestedBy], references: [id])
+  branchId        String
+  branch          Branch   @relation(fields: [branchId], references: [id])
+  itemId          String?  // null if free-text request
+  item            Item?    @relation(fields: [itemId], references: [id])
+  itemName        String   // display name (from item or free text)
+  quantityNeeded  Int
+  unit            String
+  estimatedPrice  Float?
+  actualPrice     Float?
+  paymentMethod   PaymentMethod?  // "Cash"|"BankTransfer"|"Card"|"Credit"
+  paymentDueDate  DateTime? // for Credit payment
+  supplierId      String?
+  supplier        Supplier? @relation(fields: [supplierId], references: [id])
+  source          ProcurementSource   // "LowStock"|"MaintenanceSpareParts"|"DirectRequest"|"Manual"
+  status          ProcurementStatus   @default(Pending)
+  // Pending→ReviewedByProcurement→PendingFinancialApproval→FinanciallyApproved→Purchased→ReceivedInWarehouse→Rejected
+  procurementNote String?  @db.Text
+  financialNote   String?  @db.Text
+  rejectionReason String?  @db.Text
+  reviewedBy      String?
+  reviewer        User?    @relation("PROReviewedBy", fields: [reviewedBy], references: [id])
+  approvedBy      String?
+  approver        User?    @relation("PROApprovedBy", fields: [approvedBy], references: [id])
+  purchasedBy     String?
+  purchaser       User?    @relation("PROPurchasedBy", fields: [purchasedBy], references: [id])
+  receiptPhotoUrl String?
+  referenceId     String?  // maintenanceRequestId if from spare parts
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Supplier {
+  id               String   @id @default(cuid())
+  name             String
+  contactName      String?
+  phone            String?
+  email            String?
+  address          String?  @db.Text
+  category         String?  // type of supplies
+  rating           Int?     @default(3) // 1-5
+  isActive         Boolean  @default(true)
+  procurements     ProcurementRequest[]
+  createdAt        DateTime @default(now())
+}
+
+model LostFoundItem {
+  id              String   @id @default(cuid())
+  ticketNumber    String   @unique // LF-2026-0001
+  reportedBy      String
+  reporter        User     @relation("LFReportedBy", fields: [reportedBy], references: [id])
+  branchId        String
+  branch          Branch   @relation(fields: [branchId], references: [id])
+  location        String   // room number or area (lobby/corridor/restaurant)
+  description     String   @db.Text
+  photoUrl        String?
+  guestName       String?  // if known which guest
+  guestPhone      String?
+  reservationRef  String?  // reservation number if linked
+  status          LostFoundStatus   @default(Stored)
+  // Stored | ContactedGuest | Claimed | Archived | Discarded
+  claimedBy       String?  // name of person who collected
+  claimedIdType   ClaimedIdType?  // Passport | NationalId | Other
+  claimedIdNumber String?
+  claimedAt       DateTime?
+  handedOverBy    String?  // userId who gave item
+  archivedAt      DateTime?
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model DamageReport {
+  id                String   @id @default(cuid())
+  ticketNumber      String   @unique // DMG-2026-0001
+  reportedBy        String
+  reporter          User     @relation("DMGReportedBy", fields: [reportedBy], references: [id])
+  branchId          String
+  branch            Branch   @relation(fields: [branchId], references: [id])
+  reservationRef    String?  // reservation number
+  guestName         String?
+  guestPhone        String?
+  roomNumber        String
+  damageType        DamageType   // Furniture | Electronics | Fixture | Linen | Door | Window | Other
+  description       String   @db.Text
+  photoUrls         String   @default("[]") // JSON array of photo URLs
+  reportedDuring    ReportedDuring    @default(Stay) // Stay | Checkout
+  estimatedValue    Float?
+  finalValue        Float?
+  status            DamageStatus   @default(New)
+  // New | UnderReview | PendingGuestDecision | Paid | Refused | WaivedByManagement | Escalated
+  reviewedBy        String?
+  reviewer          User?    @relation("DMGReviewedBy", fields: [reviewedBy], references: [id])
+  reviewNote        String?  @db.Text
+  reviewedAt        DateTime?
+  paymentMethod     PaymentMethod?  // Cash | Card | BankTransfer | Credit
+  paymentDueDate    DateTime? // for Credit
+  paymentRef        String?  // receipt or transfer reference
+  collectedBy       String?  // userId who collected payment
+  collectedAt       DateTime?
+  refusalReason     String?  @db.Text
+  waivedBy          String?
+  waivedAt          DateTime?
+  waiverReason      String?  @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Document {
+  id            String    @id @default(cuid())
+  title         String
+  type          DocumentType    // LICENSE, CONTRACT, ID_CARD, CERTIFICATE, INSURANCE, HEALTH_PERMIT, FIRE_PERMIT, OTHER
+  department    Department    // BRANCH, HR, MAINTENANCE
+  branchId      String
+  branch        Branch    @relation(fields: [branchId], references: [id])
+  fileUrl       String
+  fileName      String
+  fileSize      Int
+  mimeType      String
+  issuer        String?
+  expiryDate    DateTime?
+  issueDate     DateTime?
+  isExpired     Boolean   @default(false)
+  alertSent30   Boolean   @default(false)
+  alertSent7    Boolean   @default(false)
+  aiExtracted   Boolean   @default(false)
+  notes         String?   @db.Text
+  uploadedById  String
+  uploadedBy    User      @relation("UploadedDocuments", fields: [uploadedById], references: [id])
+  employeeId    String?
+  employee      User?     @relation("EmployeeDocuments", fields: [employeeId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String
+  entity    String
+  entityId  String
+  details   String?  @db.Text
+  ip        String?
+  createdAt DateTime @default(now())
+}
+
+model EmployeeTransfer {
+  id           String   @id @default(cuid())
+  employeeId   String
+  employee     User     @relation(name: "EmployeeTransfers", fields: [employeeId], references: [id])
+  fromBranchId String
+  fromBranch   Branch   @relation(name: "TransfersFrom", fields: [fromBranchId], references: [id])
+  toBranchId   String
+  toBranch     Branch   @relation(name: "TransfersTo", fields: [toBranchId], references: [id])
+  transferDate DateTime
+  reason       String   @db.Text
+  createdBy    String
+  createdAt    DateTime @default(now())
+}
+
+model AttendanceRecord {
+  id           String    @id @default(cuid())
+  employeeId   String
+  employee     User      @relation(fields: [employeeId], references: [id])
+  branchId     String
+  branch       Branch    @relation(fields: [branchId], references: [id])
+  shiftId      String
+  shift        Shift     @relation(fields: [shiftId], references: [id])
+  checkIn      DateTime?
+  checkOut     DateTime?
+  checkInLat   Float?
+  checkInLng   Float?
+  checkOutLat  Float?
+  checkOutLng  Float?
+  status       String
+  notes        String?   @db.Text
+  createdAt    DateTime  @default(now())
+}
+
+model UnitOfMeasure {
+  id           String          @id @default(cuid())
+  name         String          @unique
+  abbreviation String
+  inventoryItems InventoryItem[]
+  createdAt    DateTime        @default(now())
+}
+
+model StockAddition {
+  id                String        @id @default(cuid())
+  itemId            String
+  item              InventoryItem @relation(fields: [itemId], references: [id])
+  quantity          Int
+  notes             String?       @db.Text
+  supplierInvoiceNo String?
+  addedBy           String
+  createdAt         DateTime      @default(now())
+}
+
+enum Role {
+  Admin
+  FinanceManager
+  CEO
+  Technician
+  Receptionist
+  WarehouseManager
+  Accountant
+  BranchManager
+  MaintenanceSupervisor
+  ProcurementOfficer
+  HousekeepingStaff
+}
+
+enum EmployeeType {
+  Fixed
+  Mobile
+}
+
+enum RequestType {
+  Maintenance
+  Warehouse
+  Procurement
+}
+
+enum RequestStatus {
+  Pending
+  In_Progress
+  Awaiting_Confirmation
+  Completed
+  Rejected
+  Reopened
+}
+
+enum ApprovalStatus {
+  Pending_Finance
+  Pending_CEO
+  Approved
+  Rejected
+}
+
+enum InventoryItemStatus {
+  Available
+  Out_of_Stock
+}
+
+enum ShiftReportStatus {
+  PendingAccountant
+  Approved
+  Rejected
+}
+
+enum AttendanceLogType {
+  CheckIn
+  CheckOut
+}
+
+enum LoanStatus {
+  Pending
+  Approved
+  Rejected
+}
+
+enum LeaveType {
+  Annual
+  Sick
+  Emergency
+  Unpaid
+}
+
+enum LeaveStatus {
+  Pending
+  Approved
+  Rejected
+}
+
+enum MaintenanceCategory {
+  Electrical
+  Plumbing
+  AC
+  Carpentry
+  General
+  Cleaning
+}
+
+enum MaintenancePriority {
+  Urgent
+  High
+  Normal
+  Low
+}
+
+enum MaintenanceStatus {
+  New
+  AssignedToTechnician
+  InProgress
+  PendingInternalApproval
+  SpareParts
+  Rejected
+  Closed
+}
+
+enum MaintenanceAction {
+  Created
+  Assigned
+  Started
+  CompletionSubmitted
+  Approved
+  Rejected
+  Closed
+  SparePartsRequested
+}
+
+enum StockMovementType {
+  In
+  Out
+  Transfer
+  Adjustment
+}
+
+enum StockMovementReason {
+  EmployeeRequest
+  MaintenanceRequest
+  AutoRestock
+  ManualAdjustment
+  Transfer
+}
+
+enum WarehouseRequestStatus {
+  Pending
+  Approved
+  Rejected
+  PartiallyApproved
+}
+
+enum PaymentMethod {
+  Cash
+  BankTransfer
+  Card
+  Credit
+}
+
+enum ProcurementSource {
+  LowStock
+  MaintenanceSpareParts
+  DirectRequest
+  Manual
+}
+
+enum ProcurementStatus {
+  Pending
+  ReviewedByProcurement
+  PendingFinancialApproval
+  FinanciallyApproved
+  Purchased
+  ReceivedInWarehouse
+  Rejected
+}
+
+enum LostFoundStatus {
+  Stored
+  ContactedGuest
+  Claimed
+  Archived
+  Discarded
+}
+
+enum ClaimedIdType {
+  Passport
+  NationalId
+  Other
+}
+
+enum DamageType {
+  Furniture
+  Electronics
+  Fixture
+  Linen
+  Door
+  Window
+  Other
+}
+
+enum ReportedDuring {
+  Stay
+  Checkout
+}
+
+enum DamageStatus {
+  New
+  UnderReview
+  PendingGuestDecision
+  Paid
+  Refused
+  WaivedByManagement
+  Escalated
+}
+
+enum DocumentType {
+  LICENSE
+  CONTRACT
+  ID_CARD
+  CERTIFICATE
+  INSURANCE
+  HEALTH_PERMIT
+  FIRE_PERMIT
+  OTHER
+}
+
+enum Department {
+  BRANCH
+  HR
+  MAINTENANCE
+}
