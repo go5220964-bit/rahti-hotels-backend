@@ -4,6 +4,13 @@ import { AppError } from './error.middleware';
 
 export const verifyToken = (req: Request, res: Response, next: NextFunction) => {
   try {
+    const cleanPath = req.path.toLowerCase().replace(/\/$/, '');
+    
+    // Explicitly bypass token verification for public routes
+    if (cleanPath === '/api/auth/login' || cleanPath === '/api/whatsapp-webhook' || cleanPath === '/health') {
+      return next();
+    }
+
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       throw new AppError(401, 'UNAUTHORIZED', 'يرجى تقديم رمز وصول صالح.');
