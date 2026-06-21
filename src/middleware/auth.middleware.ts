@@ -6,8 +6,8 @@ export const verifyToken = (req: Request, res: Response, next: NextFunction) => 
   try {
     const cleanPath = req.path.toLowerCase().replace(/\/$/, '');
     
-    // Explicitly bypass token verification for public routes
-    if (cleanPath === '/api/auth/login' || cleanPath === '/api/whatsapp-webhook' || cleanPath === '/health') {
+    // Explicitly bypass token verification for public routes using flexible endsWith checks
+    if (cleanPath.endsWith('/auth/login') || cleanPath.endsWith('/whatsapp-webhook') || cleanPath.endsWith('/health') || cleanPath === '/health') {
       return next();
     }
 
