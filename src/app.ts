@@ -212,9 +212,10 @@ app.use(errorHandler);
 
 // Start Server if not imported by tests
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(env.PORT, () => {
-    console.log(`🚀 Rahti Hotels Operations Server is running on port ${env.PORT}`);
-    console.log(`📡 WhatsApp Webhook URL: http://localhost:${env.PORT}/api/whatsapp-webhook`);
+  const PORT = parseInt(process.env.PORT || '3000', 10);
+  app.listen(PORT, () => {
+    console.log(`🚀 Rahti Hotels Operations Server is running on port ${PORT}`);
+    console.log(`📡 WhatsApp Webhook URL: http://localhost:${PORT}/api/whatsapp-webhook`);
     console.log(`⚙️  Verify Token is set to: "${env.WHATSAPP_VERIFY_TOKEN}"`);
   });
 }
