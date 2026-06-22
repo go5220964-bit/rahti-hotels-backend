@@ -132,7 +132,7 @@ async function runTests() {
     const urlStr = typeof input === 'string' ? input : input.toString();
     
     // Only intercept local API requests (except public endpoints)
-    if (urlStr.includes(`/api/`) && !urlStr.includes('/api/whatsapp-webhook') && !urlStr.includes('/api/auth/login')) {
+    if (urlStr.includes(`/api/`) && !urlStr.includes('/webhook') && !urlStr.includes('/api/auth/login')) {
       init = init || {};
       const headers = (init.headers || {}) as any;
       if (headers['X-Bypass-Auth'] === 'true') {
@@ -196,7 +196,7 @@ async function runTests() {
     const challengeVal = 'test-challenge-12345';
     
     const verifyRes = await fetch(
-      `http://localhost:${PORT}/api/whatsapp-webhook?hub.mode=subscribe&hub.verify_token=${verifyToken}&hub.challenge=${challengeVal}`
+      `http://localhost:${PORT}/webhook?hub.mode=subscribe&hub.verify_token=${verifyToken}&hub.challenge=${challengeVal}`
     );
     const verifyText = await verifyRes.text();
     
@@ -216,7 +216,7 @@ async function runTests() {
     // Test 2: Trigger List Menu by sending keyword "طلب"
     // -------------------------------------------------------------
     console.log('\n--- 2. Testing Interactive Menu Trigger (POST "طلب") ---');
-    const menuRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const menuRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, 'طلب', 'wamid.test_menu_01')),
@@ -234,7 +234,7 @@ async function runTests() {
     console.log('\n--- 3. Testing Arabic Request Creation (POST text) ---');
     const requestText = 'صيانة: تسريب مياه شديد من صنبور الحمام في الغرفة 502';
     
-    const reqCreateRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const reqCreateRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, requestText, 'wamid.test_create_02')),
@@ -263,7 +263,7 @@ async function runTests() {
     console.log('\n--- 4. Testing Procurement Threshold Routing ($7,500) ---');
     const procText = 'مشتريات: أثاث ترقية بهو الاستقبال الرئيسي (سعر: 7500)';
     
-    const procCreateRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const procCreateRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, procText, 'wamid.test_proc_03')),
@@ -298,7 +298,7 @@ async function runTests() {
 
     // Step 5a: Technician (Thomas) clicks Completed button
     console.log('   Step 5a: Technician clicks complete button...');
-    const compButtonRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const compButtonRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(
@@ -316,7 +316,7 @@ async function runTests() {
 
     // Step 5b: Technician uploads completion image
     console.log('   Step 5b: Technician uploads image attachment...');
-    const imageRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const imageRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateImagePayload(
@@ -342,7 +342,7 @@ async function runTests() {
 
     // Step 5c: Original Reporter (Lara) clicks Yes, Confirmed
     console.log('   Step 5c: Reporter clicks "Yes, Confirmed"...');
-    const confirmYesRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const confirmYesRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(
@@ -360,7 +360,7 @@ async function runTests() {
 
     // Step 5d: Reporter sends rating "5" via text message
     console.log('   Step 5d: Reporter sends rating "5" to close ticket...');
-    const ratingRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const ratingRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, '5', 'wamid.test_rating_07')),
@@ -406,7 +406,7 @@ async function runTests() {
 
     // Step 6b: Supervisor Lara Croft clicks Rejection Button
     console.log('   Step 6b: Supervisor clicks "❌ طلب إعادة عمل"...');
-    const rejectButtonRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const rejectButtonRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(
@@ -425,7 +425,7 @@ async function runTests() {
     // Step 6c: Supervisor sends rejection reason text note
     console.log('   Step 6c: Supervisor sends rejection reason note...');
     const reasonText = 'الماء لا يزال بارداً والغلاية تفصل بعد دقيقة';
-    const reasonRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const reasonRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, reasonText, 'wamid.test_reject_reason_09')),
@@ -459,7 +459,7 @@ async function runTests() {
 
     // Step 7a: Technician Thomas clicks "🛒 طلب شراء خارجي" button
     console.log('   Step 7a: Technician triggers external procurement...');
-    const startProcRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const startProcRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(
@@ -478,7 +478,7 @@ async function runTests() {
     // Step 7b: Technician Thomas sends item description
     console.log('   Step 7b: Technician sends item description...');
     const itemDesc = 'مضخة مياه إضافية لفرع طريق السيل';
-    const itemDescRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const itemDescRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(thomas.phoneNumber, thomas.name, itemDesc, 'wamid.test_item_desc_11')),
@@ -491,7 +491,7 @@ async function runTests() {
     // Step 7c: Procurement Officer Marcus Vance (+1234567895) receives it and replies with cost "450"
     const marcus = users.find(u => u.name === 'Marcus Vance')!;
     console.log('   Step 7c: Procurement Officer sends cost estimate...');
-    const costRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const costRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(marcus.phoneNumber, marcus.name, '450', 'wamid.test_proc_cost_12')),
@@ -518,7 +518,7 @@ async function runTests() {
     // Step 7d: Financial Manager Sarah Conners (+1234567892) clicks "✅ تعميد مالي"
     const sarah = users.find(u => u.name === 'Sarah Conners')!;
     console.log('   Step 7d: Financial Manager approves the procurement request...');
-    const fmApproveRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const fmApproveRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(
@@ -552,7 +552,7 @@ async function runTests() {
     
     // Step 8a: Lara triggers shift report via text "تقفيلة"
     console.log('   Step 8a: Lara triggers shift report...');
-    const startShiftRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const startShiftRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(laraUser.phoneNumber, laraUser.name, 'تقفيلة', 'wamid.test_shift_start')),
@@ -563,7 +563,7 @@ async function runTests() {
 
     // Step 8b: Lara selects shift '1' (صباحي)
     console.log('   Step 8b: Lara selects morning shift (1)...');
-    const selectShiftRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const selectShiftRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(laraUser.phoneNumber, laraUser.name, '1', 'wamid.test_shift_select')),
@@ -574,7 +574,7 @@ async function runTests() {
 
     // Step 8c: Lara inputs cashTotal '1500'
     console.log('   Step 8c: Lara inputs cashTotal (1500)...');
-    const cashTotalRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const cashTotalRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(laraUser.phoneNumber, laraUser.name, '1500', 'wamid.test_shift_cash_total')),
@@ -585,7 +585,7 @@ async function runTests() {
 
     // Step 8d: Lara inputs cashExpenses '100'
     console.log('   Step 8d: Lara inputs cashExpenses (100)...');
-    const cashExpensesRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const cashExpensesRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(laraUser.phoneNumber, laraUser.name, '100', 'wamid.test_shift_cash_expenses')),
@@ -596,7 +596,7 @@ async function runTests() {
 
     // Step 8e: Lara inputs visa '200'
     console.log('   Step 8e: Lara inputs visa (200)...');
-    const visaRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const visaRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(laraUser.phoneNumber, laraUser.name, '200', 'wamid.test_shift_visa')),
@@ -607,7 +607,7 @@ async function runTests() {
 
     // Step 8f: Lara inputs mada '300'
     console.log('   Step 8f: Lara inputs mada (300)...');
-    const madaRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const madaRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(laraUser.phoneNumber, laraUser.name, '300', 'wamid.test_shift_mada')),
@@ -618,7 +618,7 @@ async function runTests() {
 
     // Step 8g: Lara inputs mastercard '150'
     console.log('   Step 8g: Lara inputs mastercard (150)...');
-    const mcRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const mcRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(laraUser.phoneNumber, laraUser.name, '150', 'wamid.test_shift_mc')),
@@ -629,7 +629,7 @@ async function runTests() {
 
     // Step 8h: Lara inputs gulfNet '50'
     console.log('   Step 8h: Lara inputs gulfNet (50)...');
-    const gulfNetRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const gulfNetRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(laraUser.phoneNumber, laraUser.name, '50', 'wamid.test_shift_gulfnet')),
@@ -640,7 +640,7 @@ async function runTests() {
 
     // Step 8i: Lara inputs tabby '100'
     console.log('   Step 8i: Lara inputs tabby (100)...');
-    const tabbyRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const tabbyRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(laraUser.phoneNumber, laraUser.name, '100', 'wamid.test_shift_tabby')),
@@ -651,7 +651,7 @@ async function runTests() {
 
     // Step 8j: Lara inputs bankTransfer '400'
     console.log('   Step 8j: Lara inputs bankTransfer (400) and gets summary...');
-    const bankTransferRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const bankTransferRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(laraUser.phoneNumber, laraUser.name, '400', 'wamid.test_shift_bank')),
@@ -662,7 +662,7 @@ async function runTests() {
 
     // Step 8k: Lara clicks "✅ إرسال التقفيلة"
     console.log('   Step 8k: Lara confirms shift report submission...');
-    const confirmShiftRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const confirmShiftRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(
@@ -690,7 +690,7 @@ async function runTests() {
     // Step 8l: Accountant (+1234567896) clicks "❌ رفض"
     const accountantUser = users.find(u => u.role === 'Accountant' || u.phoneNumber === '+1234567896')!;
     console.log('   Step 8l: Accountant clicks Reject button...');
-    const rejectClickRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const rejectClickRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(
@@ -708,7 +708,7 @@ async function runTests() {
     // Step 8m: Accountant sends rejection reason "يوجد خطأ في مبلغ مدى"
     console.log('   Step 8m: Accountant sends rejection reason text...');
     const srReasonText = 'يوجد خطأ في مبلغ مدى';
-    const rejectReasonRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const rejectReasonRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(
@@ -857,7 +857,7 @@ async function runTests() {
     
     // Step 10a: Employee Lara sends "طلب سلفة"
     console.log('   Step 10a: Employee sends "طلب سلفة"...');
-    const loanTriggerRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const loanTriggerRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, 'طلب سلفة', 'wamid.loan_01')),
@@ -868,7 +868,7 @@ async function runTests() {
 
     // Step 10b: Employee sends amount 500
     console.log('   Step 10b: Employee sends amount 500...');
-    const loanAmountRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const loanAmountRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, '500', 'wamid.loan_02')),
@@ -879,7 +879,7 @@ async function runTests() {
 
     // Step 10c: Employee sends reason "مصاريف شخصية طارئة"
     console.log('   Step 10c: Employee sends reason...');
-    const loanReasonRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const loanReasonRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, 'مصاريف شخصية طارئة', 'wamid.loan_03')),
@@ -890,7 +890,7 @@ async function runTests() {
 
     // Step 10d: Employee clicks confirm button
     console.log('   Step 10d: Employee confirms request...');
-    const loanConfirmRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const loanConfirmRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(lara.phoneNumber, lara.name, 'confirm_loan_submit', 'تأكيد', 'wamid.loan_04')),
@@ -912,7 +912,7 @@ async function runTests() {
     // Step 10e: Accountant rejects the loan request
     console.log('   Step 10e: Accountant clicks reject button...');
     const testAccountant = users.find(u => u.role === 'Accountant')!;
-    const loanRejectBtnRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const loanRejectBtnRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(testAccountant.phoneNumber, testAccountant.name, `reject_loan_req_${pendingLoan.id}`, 'رفض', 'wamid.loan_05')),
@@ -923,7 +923,7 @@ async function runTests() {
 
     // Step 10f: Accountant inputs rejection reason
     console.log('   Step 10f: Accountant inputs reason "المبلغ يتجاوز الحد المسموح"...');
-    const loanRejectReasonRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const loanRejectReasonRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(testAccountant.phoneNumber, testAccountant.name, 'المبلغ يتجاوز الحد المسموح', 'wamid.loan_06')),
@@ -947,7 +947,7 @@ async function runTests() {
 
     // Step 11a: Employee sends "طلب إجازة"
     console.log('   Step 11a: Employee sends "طلب إجازة"...');
-    const leaveTriggerRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const leaveTriggerRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, 'طلب إجازة', 'wamid.leave_01')),
@@ -958,7 +958,7 @@ async function runTests() {
 
     // Step 11b: Employee chooses Annual (1)
     console.log('   Step 11b: Employee selects Annual (1)...');
-    const leaveTypeRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const leaveTypeRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, '1', 'wamid.leave_02')),
@@ -969,7 +969,7 @@ async function runTests() {
 
     // Step 11c: Employee inputs start date (YYYY-MM-DD) - next week 2026-06-25
     console.log('   Step 11c: Employee inputs start date "2026-06-25"...');
-    const leaveStartRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const leaveStartRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, '2026-06-25', 'wamid.leave_03')),
@@ -980,7 +980,7 @@ async function runTests() {
 
     // Step 11d: Employee inputs end date (YYYY-MM-DD) - next week 2026-06-27 (3 days: 25, 26, 27)
     console.log('   Step 11d: Employee inputs end date "2026-06-27"...');
-    const leaveEndRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const leaveEndRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, '2026-06-27', 'wamid.leave_04')),
@@ -991,7 +991,7 @@ async function runTests() {
 
     // Step 11e: Employee inputs reason "إجازة عائلية"
     console.log('   Step 11e: Employee inputs reason...');
-    const leaveReasonRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const leaveReasonRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, 'إجازة عائلية', 'wamid.leave_05')),
@@ -1002,7 +1002,7 @@ async function runTests() {
 
     // Step 11f: Employee confirms leave request
     console.log('   Step 11f: Employee confirms request...');
-    const leaveConfirmRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const leaveConfirmRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(lara.phoneNumber, lara.name, 'confirm_leave_submit', 'تأكيد', 'wamid.leave_06')),
@@ -1028,21 +1028,21 @@ async function runTests() {
     console.log('\n--- 12. Testing Leave Request Balance Failure ---');
 
     // Step 12a: Employee sends "طلب إجازة"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, 'طلب إجازة', 'wamid.bal_01')),
     });
 
     // Step 12b: Employee chooses Annual (1)
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, '1', 'wamid.bal_02')),
     });
 
     // Step 12c: Employee inputs start date "2026-07-10"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, '2026-07-10', 'wamid.bal_03')),
@@ -1052,7 +1052,7 @@ async function runTests() {
     console.log('   Step 12d: Employee requests 30+ days (expecting balance check to fail)...');
     WebhookController.sentMessages = []; // Clear sent messages tracker
 
-    const balEndRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const balEndRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, '2026-08-15', 'wamid.bal_04')),
@@ -1086,49 +1086,49 @@ async function runTests() {
     const branchManager = users.find(u => u.phoneNumber === '+966501111004')!;
 
     // Step A1: Lara sends "طلب"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, 'طلب', 'wamid.mnt_a_01')),
     });
 
     // Step A2: Lara selects option 1 ( صيانة عامة )
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, '1', 'wamid.mnt_a_02')),
     });
 
     // Step A3: Lara chooses Category 3 ( AC / تكييف )
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, '3', 'wamid.mnt_a_03')),
     });
 
     // Step A4: Lara enters Location "غرفة 303"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, 'غرفة 303', 'wamid.mnt_a_04')),
     });
 
     // Step A5: Lara enters Description "المكيف ينقط ماء داخل الغرفة"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, 'المكيف ينقط ماء داخل الغرفة', 'wamid.mnt_a_05')),
     });
 
     // Step A6: Lara chooses Priority 2 ( High / عالية )
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, '2', 'wamid.mnt_a_06')),
     });
 
     // Step A7: Lara skips photo upload
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(lara.phoneNumber, lara.name, 'تخطي', 'wamid.mnt_a_07')),
@@ -1136,7 +1136,7 @@ async function runTests() {
 
     // Step A8: Lara confirms submission
     WebhookController.sentMessages = []; // Clear notifications log
-    const laraConfirmRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const laraConfirmRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(lara.phoneNumber, lara.name, 'confirm_maintenance_submit', 'تأكيد البلاغ', 'wamid.mnt_a_08')),
@@ -1170,7 +1170,7 @@ async function runTests() {
     console.log('\n--- Test B: Testing Technician Assignment & Work Start ---');
 
     // Step B1: Omar clicks assign technician button
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(omar.phoneNumber, omar.name, `assign_tech_btn_${mntRequest.id}`, 'تعيين فني', 'wamid.mnt_b_01')),
@@ -1178,7 +1178,7 @@ async function runTests() {
 
     // Step B2: Omar selects Option 1 (Ahmed)
     WebhookController.sentMessages = [];
-    const assignRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const assignRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(omar.phoneNumber, omar.name, '1', 'wamid.mnt_b_02')),
@@ -1207,7 +1207,7 @@ async function runTests() {
     console.log(`   └ Technician ${assignedTech.name} was successfully notified.`);
 
     // Step B3: Technician starts work
-    const startRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const startRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(assignedTech.phoneNumber, assignedTech.name, `start_work_req_${mntRequest.id}`, 'بدء العمل', 'wamid.mnt_b_03')),
@@ -1232,14 +1232,14 @@ async function runTests() {
     console.log('\n--- Test C: Testing Technician Completion Submission ---');
 
     // Step C1: Technician sends "تم MNT-2026-XXXX" (ticketNumber)
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(assignedTech.phoneNumber, assignedTech.name, `تم ${mntRequest.ticketNumber}`, 'wamid.mnt_c_01')),
     });
 
     // Step C2: Technician sends "بدون صورة"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(assignedTech.phoneNumber, assignedTech.name, 'بدون صورة', 'wamid.mnt_c_02')),
@@ -1247,7 +1247,7 @@ async function runTests() {
 
     // Step C3: Technician sends completion note
     WebhookController.sentMessages = [];
-    const completeRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const completeRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(assignedTech.phoneNumber, assignedTech.name, 'تم تنظيف خرطوم التصريف وتعبئة الفريون', 'wamid.mnt_c_03')),
@@ -1279,7 +1279,7 @@ async function runTests() {
     console.log('\n--- Test D: Testing BranchManager Approval ---');
 
     // Step D1: Manager approves completion
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(branchManager.phoneNumber, branchManager.name, `approve_mnt_completion_${mntRequest.id}`, 'تأكيد الإصلاح', 'wamid.mnt_d_01')),
@@ -1287,7 +1287,7 @@ async function runTests() {
 
     // Step D2: Manager inputs "تخطي" for note
     WebhookController.sentMessages = [];
-    const approveMntRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const approveMntRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(branchManager.phoneNumber, branchManager.name, 'تخطي', 'wamid.mnt_d_02')),
@@ -1328,7 +1328,7 @@ async function runTests() {
     }
 
     // Step E1: Manager clicks reject completion
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(branchManager.phoneNumber, branchManager.name, `reject_mnt_completion_${mnt3.id}`, 'الإصلاح غير مكتمل', 'wamid.mnt_e_01')),
@@ -1336,7 +1336,7 @@ async function runTests() {
 
     // Step E2: Manager inputs rejection reason
     WebhookController.sentMessages = [];
-    const rejectRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const rejectRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(branchManager.phoneNumber, branchManager.name, 'الإصلاح غير مكتمل الباب ما زال يهتز عند الفتح', 'wamid.mnt_e_02')),
@@ -1382,35 +1382,35 @@ async function runTests() {
     console.log('\n--- Test F: Employee places Warehouse Request ---');
     
     // Step F1: Lara sends "طلب"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(whLara.phoneNumber, whLara.name, 'طلب', 'wamid.whr_f_01')),
     });
 
     // Step F2: Lara selects option 3 ( طلب من المستودع )
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(whLara.phoneNumber, whLara.name, '3', 'wamid.whr_f_02')),
     });
 
     // Step F3: Lara selects item 1 (منشفة يد صغيرة) from the list
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(whLara.phoneNumber, whLara.name, '1', 'wamid.whr_f_03')),
     });
 
     // Step F4: Lara enters quantity "10"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(whLara.phoneNumber, whLara.name, '10', 'wamid.whr_f_04')),
     });
 
     // Step F5: Lara enters purpose "استبدال مناشف الغرف"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(whLara.phoneNumber, whLara.name, 'استبدال مناشف الغرف', 'wamid.whr_f_05')),
@@ -1418,7 +1418,7 @@ async function runTests() {
 
     // Step F6: Lara confirms submission
     WebhookController.sentMessages = [];
-    const whrConfirmRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const whrConfirmRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(whLara.phoneNumber, whLara.name, 'confirm_whr_submit', 'تأكيد الطلب', 'wamid.whr_f_06')),
@@ -1453,7 +1453,7 @@ async function runTests() {
 
     // Step G1: Marcus clicks approve full quantity
     WebhookController.sentMessages = [];
-    const whrApproveRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const whrApproveRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(whMarcus.phoneNumber, whMarcus.name, `issue_full_${whRequest.id}`, 'صرف كامل الكمية', 'wamid.whr_g_01')),
@@ -1508,28 +1508,28 @@ async function runTests() {
     console.log('\n--- Test H: Procurement Officer Review & Accountant Approval ---');
 
     // Step H1: PO starts review
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(whPO.phoneNumber, whPO.name, `review_procurement_${autoProc.id}`, 'مراجعة الطلب', 'wamid.whr_h_01')),
     });
 
     // Step H2: PO inputs estimated price "300"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(whPO.phoneNumber, whPO.name, '300', 'wamid.whr_h_02')),
     });
 
     // Step H3: PO selects supplier option 2 (sup-2)
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(whPO.phoneNumber, whPO.name, '2', 'wamid.whr_h_03')),
     });
 
     // Step H4: PO selects payment method option 2 (BankTransfer)
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(whPO.phoneNumber, whPO.name, '2', 'wamid.whr_h_04')),
@@ -1537,7 +1537,7 @@ async function runTests() {
 
     // Step H5: PO inputs review note "عرض سعر مناسب"
     WebhookController.sentMessages = [];
-    const reviewRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const reviewRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(whPO.phoneNumber, whPO.name, 'عرض سعر مناسب', 'wamid.whr_h_05')),
@@ -1570,7 +1570,7 @@ async function runTests() {
 
     // Step I1: Accountant approves financially
     WebhookController.sentMessages = [];
-    const financeApproveRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const financeApproveRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(whAccountant.phoneNumber, whAccountant.name, `approve_finance_${autoProc.id}`, 'اعتماد مالي', 'wamid.whr_i_01')),
@@ -1594,14 +1594,14 @@ async function runTests() {
     console.log('   └ Procurement Officer was successfully notified of financial approval.');
 
     // Step I2: PO clicks mark purchased button
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(whPO.phoneNumber, whPO.name, `mark_purchased_btn_${autoProc.id}`, 'تأكيد الشراء', 'wamid.whr_i_02')),
     });
 
     // Step I3: PO inputs actual price "280"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(whPO.phoneNumber, whPO.name, '280', 'wamid.whr_i_03')),
@@ -1609,7 +1609,7 @@ async function runTests() {
 
     // Step I4: PO selects payment method option 2 (BankTransfer)
     WebhookController.sentMessages = [];
-    const markPurchasedRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const markPurchasedRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(whPO.phoneNumber, whPO.name, '2', 'wamid.whr_i_04')),
@@ -1633,7 +1633,7 @@ async function runTests() {
     console.log('   └ Warehouse Manager was successfully notified of incoming shipment.');
 
     // Step I5: Warehouse Manager confirms receiving in warehouse
-    const receiveRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const receiveRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(whMarcus.phoneNumber, whMarcus.name, `confirm_receive_btn_${autoProc.id}`, 'تأكيد الاستلام', 'wamid.whr_i_05')),
@@ -1680,56 +1680,56 @@ async function runTests() {
     console.log('\n--- Test J: HousekeepingStaff reports found item ---');
 
     // Step J1: Fatima sends "طلب"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(fatima.phoneNumber, fatima.name, 'طلب', 'wamid.lf_j_01')),
     });
 
     // Step J2: Fatima selects option 6 (تسجيل مفقودات)
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(fatima.phoneNumber, fatima.name, '6', 'wamid.lf_j_02')),
     });
 
     // Step J3: Fatima selects option 1 (عثرت على غرض مفقود)
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(fatima.phoneNumber, fatima.name, '1', 'wamid.lf_j_03')),
     });
 
     // Step J4: Fatima sends Location "غرفة 404"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(fatima.phoneNumber, fatima.name, 'غرفة 404', 'wamid.lf_j_04')),
     });
 
     // Step J5: Fatima sends Description "ساعة يد ذهبية رولكس"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(fatima.phoneNumber, fatima.name, 'ساعة يد ذهبية رولكس', 'wamid.lf_j_05')),
     });
 
     // Step J6: Fatima sends "تخطي" for photo
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(fatima.phoneNumber, fatima.name, 'تخطي', 'wamid.lf_j_06')),
     });
 
     // Step J7: Fatima sends guest name "عبدالله محمد"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(fatima.phoneNumber, fatima.name, 'عبدالله محمد', 'wamid.lf_j_07')),
     });
 
     // Step J8: Fatima clicks confirm button
-    const lfConfirmRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const lfConfirmRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(fatima.phoneNumber, fatima.name, 'confirm_lf_btn', 'تأكيد تسجيل المفقودات', 'wamid.lf_j_08')),
@@ -1784,70 +1784,70 @@ async function runTests() {
     console.log('\n--- Test L: Manager reports damage ---');
 
     // Step L1: Manager sends "طلب"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(bmUser.phoneNumber, bmUser.name, 'طلب', 'wamid.dmg_l_01')),
     });
 
     // Step L2: Manager selects option 7 (تسجيل تلفيات)
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(bmUser.phoneNumber, bmUser.name, '7', 'wamid.dmg_l_02')),
     });
 
     // Step L3: Manager sends room number "505"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(bmUser.phoneNumber, bmUser.name, '505', 'wamid.dmg_l_03')),
     });
 
     // Step L4: Manager sends reservation ref "RES-2026-99"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(bmUser.phoneNumber, bmUser.name, 'RES-2026-99', 'wamid.dmg_l_04')),
     });
 
     // Step L5: Manager selects damage type 2 (Electronics)
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(bmUser.phoneNumber, bmUser.name, '2', 'wamid.dmg_l_05')),
     });
 
     // Step L6: Manager selects met during stay 1 (Stay)
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(bmUser.phoneNumber, bmUser.name, '1', 'wamid.dmg_l_06')),
     });
 
     // Step L7: Manager sends description "شاشة التلفزيون مكسورة بالكامل"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(bmUser.phoneNumber, bmUser.name, 'شاشة التلفزيون مكسورة بالكامل', 'wamid.dmg_l_07')),
     });
 
     // Step L8: Manager sends "تخطي" for photo
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(bmUser.phoneNumber, bmUser.name, 'تخطي', 'wamid.dmg_l_08')),
     });
 
     // Step L9: Manager sends guest name "يوسف أحمد"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(bmUser.phoneNumber, bmUser.name, 'يوسف أحمد', 'wamid.dmg_l_09')),
     });
 
     // Step L10: Manager clicks confirm button
-    const dmgConfirmRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const dmgConfirmRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(bmUser.phoneNumber, bmUser.name, 'confirm_dmg_btn', 'تأكيد تسجيل التلفيات', 'wamid.dmg_l_10')),
@@ -1873,21 +1873,21 @@ async function runTests() {
     console.log('\n--- Test M: Manager reviews damage & receptionist collects payment ---');
 
     // Step M1: Manager clicks review button
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(bmUser.phoneNumber, bmUser.name, `dmg_review_btn_${dmgReport.id}`, 'مراجعة التلف', 'wamid.dmg_m_01')),
     });
 
     // Step M2: Manager sends proposed value "1500"
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(bmUser.phoneNumber, bmUser.name, '1500', 'wamid.dmg_m_02')),
     });
 
     // Step M3: Manager sends review note "شاشة تلفزيون سامسونج 55 بوصة"
-    const reviewDmgRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const reviewDmgRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(bmUser.phoneNumber, bmUser.name, 'شاشة تلفزيون سامسونج 55 بوصة', 'wamid.dmg_m_03')),
@@ -1908,21 +1908,21 @@ async function runTests() {
     console.log('   └ Damage report reviewed and set to PendingGuestDecision.');
 
     // Step M4: Receptionist clicks collect payment
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(receptionist.phoneNumber, receptionist.name, `dmg_accept_btn_${dmgReport.id}`, 'دفع التعويض', 'wamid.dmg_m_04')),
     });
 
     // Step M5: Receptionist selects Option 2 (Card)
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(receptionist.phoneNumber, receptionist.name, '2', 'wamid.dmg_m_05')),
     });
 
     // Step M6: Receptionist sends receipt ref "REC-999-CARD"
-    const collectPaymentRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const collectPaymentRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(receptionist.phoneNumber, receptionist.name, 'REC-999-CARD', 'wamid.dmg_m_06')),
@@ -1985,14 +1985,14 @@ async function runTests() {
     }
 
     // Receptionist clicks refuse via WhatsApp
-    await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateButtonPayload(receptionist.phoneNumber, receptionist.name, `dmg_refuse_btn_${dmgReport2.id}`, 'رفض السداد', 'wamid.dmg_n_01')),
     });
 
     // Receptionist enters refusal reason
-    const refuseRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const refuseRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(receptionist.phoneNumber, receptionist.name, 'العميل يدعي أن التلف كان سابقاً لدخوله', 'wamid.dmg_n_02')),
@@ -2016,7 +2016,7 @@ async function runTests() {
     // -------------------------------------------------------------
     console.log('\n--- Test O: BranchManager types "ملخص" → receives Daily Digest ---');
     WebhookController.sentMessages = [];
-    const digestBMRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const digestBMRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(bmUser.phoneNumber, bmUser.name, 'ملخص', 'wamid.digest_o_01')),
@@ -2036,7 +2036,7 @@ async function runTests() {
     console.log('\n--- Test P: Admin types "ملخص" → receives digest for all branches ---');
     const adminUser = allUsers.find(u => (u.role as string) === 'Admin')!;
     WebhookController.sentMessages = [];
-    const digestAdminRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const digestAdminRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(generateTextPayload(adminUser.phoneNumber, adminUser.name, 'ملخص', 'wamid.digest_p_01')),
@@ -2158,7 +2158,7 @@ async function runTests() {
       }]
     };
 
-    const webhookRes = await fetch(`http://localhost:${PORT}/api/whatsapp-webhook`, {
+    const webhookRes = await fetch(`http://localhost:${PORT}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(docPayload)

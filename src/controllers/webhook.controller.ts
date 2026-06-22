@@ -5,7 +5,7 @@ import { WhatsAppWebhookPayload } from '../types';
 
 export class WebhookController {
   /**
-   * GET /api/whatsapp-webhook
+   * GET /webhook
    * Verification handshake for Meta WhatsApp Cloud API configuration.
    */
   public static verifyWebhook = (req: Request, res: Response, next: NextFunction): void => {
@@ -36,7 +36,7 @@ export class WebhookController {
   };
 
   /**
-   * POST /api/whatsapp-webhook
+   * POST /webhook
    * Receives incoming messages, media uploads, and button interactions from WhatsApp users.
    */
   public static handleWebhook = async (req: Request, res: Response, next: NextFunction): Promise<void> => {

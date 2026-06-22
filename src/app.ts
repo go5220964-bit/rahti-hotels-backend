@@ -48,8 +48,8 @@ app.get('/health', (req, res) => {
 });
 
 // WhatsApp Webhook Routes
-app.get('/api/whatsapp-webhook', WebhookController.verifyWebhook);
-app.post('/api/whatsapp-webhook', WebhookController.handleWebhook);
+app.get('/webhook', WebhookController.verifyWebhook);
+app.post('/webhook', WebhookController.handleWebhook);
 
 // Public Auth Route
 app.post('/api/auth/login', AuthController.login);
@@ -215,7 +215,7 @@ if (process.env.NODE_ENV !== 'test') {
   const PORT = parseInt(process.env.PORT || '3000', 10);
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Rahti Hotels Operations Server is running on port ${PORT}`);
-    console.log(`📡 WhatsApp Webhook URL: http://0.0.0.0:${PORT}/api/whatsapp-webhook`);
+    console.log(`📡 WhatsApp Webhook URL: http://0.0.0.0:${PORT}/webhook`);
     console.log(`⚙️  Verify Token is set to: "${env.WHATSAPP_VERIFY_TOKEN}"`);
   });
 }
