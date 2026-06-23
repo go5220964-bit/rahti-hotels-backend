@@ -72,9 +72,9 @@ export class WebhookController {
         try {
           const responseText = await WhatsAppService.processMessage(msg);
           
-          // 3. Mock sending WhatsApp message back to user via Facebook Graph API
+          // 3. Send WhatsApp message back to user via Facebook Graph API
           if (responseText && responseText.trim() !== '') {
-            this.mockSendWhatsAppMessage(msg.senderNumber, responseText);
+            await WhatsAppService.sendWhatsAppMessage(msg.senderNumber, responseText);
           }
         } catch (msgError) {
           console.error(`🔴 Error processing individual message ${msg.messageId} from ${msg.senderNumber}:`, msgError);
