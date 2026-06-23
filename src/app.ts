@@ -114,6 +114,78 @@ app.get('/webhook/payloads', (req, res) => {
   res.json(WebhookController.incomingPayloads);
 });
 
+app.get('/webhook/send-template', async (req, res) => {
+  try {
+    const axios = require('axios');
+    const phoneId = process.env.PHONE_NUMBER_ID;
+    const token = process.env.WHATSAPP_TOKEN;
+    
+    console.log(`Sending template message to 966563104828. PhoneID: ${phoneId}`);
+    
+    const response = await axios.post(
+      `https://graph.facebook.com/v18.0/${phoneId}/messages`,
+      {
+        messaging_product: 'whatsapp',
+        to: '966563104828',
+        type: 'template',
+        template: {
+          name: 'hello_world',
+          language: { code: 'en_US' }
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    res.status(200).json({
+      success: true,
+      status: response.status,
+      data: response.data
+    });
+  } catch (error: any) {
+    try {
+      const axios = require('axios');
+      const phoneId = process.env.PHONE_NUMBER_ID;
+      const token = process.env.WHATSAPP_TOKEN;
+      const response = await axios.post(
+        `https://graph.facebook.com/v18.0/${phoneId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          to: '966563104828',
+          type: 'template',
+          template: {
+            name: '3p_direct_integration_test_template',
+            language: { code: 'en_US' }
+          }
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      res.status(200).json({
+        success: true,
+        fallbackUsed: true,
+        status: response.status,
+        data: response.data
+      });
+    } catch (fallbackError: any) {
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        fallbackError: fallbackError.message,
+        data: fallbackError.response?.data || error.response?.data
+      });
+    }
+  }
+});
+
 // Public Auth Route
 app.post('/api/auth/login', AuthController.login);
 
