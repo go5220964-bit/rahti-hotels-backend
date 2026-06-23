@@ -217,6 +217,22 @@ async function main() {
     },
   });
 
+  const existingTestUser = await prisma.user.findUnique({
+    where: { phoneNumber: '966563104828' }
+  });
+
+  if (!existingTestUser) {
+    await prisma.user.create({
+      data: {
+        name: 'Test WhatsApp User',
+        role: Role.Receptionist,
+        phoneNumber: '966563104828',
+        password: passwordHash,
+        branchId: sailRoadBranch.id,
+      },
+    });
+  }
+
   console.log('👤 Created Users for Sail Road Branch:');
 
   // 5. Create Inventory Items for Sail Road Branch
