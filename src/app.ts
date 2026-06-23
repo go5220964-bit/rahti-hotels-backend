@@ -60,6 +60,45 @@ app.get('/webhook/test-send', async (req, res) => {
   }
 });
 
+app.get('/webhook/test-send-status', async (req, res) => {
+  try {
+    const axios = require('axios');
+    const phoneId = process.env.PHONE_NUMBER_ID;
+    const token = process.env.WHATSAPP_TOKEN;
+    
+    console.log(`Sending diagnostic message. PhoneID: ${phoneId}, Token configured: ${!!token}`);
+    
+    const response = await axios.post(
+      `https://graph.facebook.com/v18.0/${phoneId}/messages`,
+      {
+        messaging_product: 'whatsapp',
+        to: '966563104828',
+        type: 'text',
+        text: { body: 'رسالة تشخيصية من الخادم' }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    res.status(200).json({
+      success: true,
+      status: response.status,
+      data: response.data
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data
+    });
+  }
+});
+
 // Public Auth Route
 app.post('/api/auth/login', AuthController.login);
 
