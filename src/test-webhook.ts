@@ -192,7 +192,7 @@ async function runTests() {
     // Test 1: Verify WhatsApp Webhook Handshake (GET)
     // -------------------------------------------------------------
     console.log('\n--- 1. Testing Webhook Handshake Verification (GET) ---');
-    const verifyToken = 'super-secret-verify-token-123';
+    const verifyToken = process.env.WEBHOOK_VERIFY_TOKEN || 'rahti_hotels_2026';
     const challengeVal = 'test-challenge-12345';
     
     const verifyRes = await fetch(

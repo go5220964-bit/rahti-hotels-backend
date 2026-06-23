@@ -216,7 +216,7 @@ if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Rahti Hotels Operations Server is running on port ${PORT}`);
     console.log(`📡 WhatsApp Webhook URL: http://0.0.0.0:${PORT}/webhook`);
-    console.log(`⚙️  Verify Token is set to: "${env.WHATSAPP_VERIFY_TOKEN}"`);
+    console.log(`⚙️  Verify Token is set to: "${process.env.WEBHOOK_VERIFY_TOKEN}"`);
   });
 }
 

@@ -18,7 +18,7 @@ export class WebhookController {
       console.log(`hub.mode: ${mode}, hub.verify_token: ${token}`);
 
       if (mode && token) {
-        if (mode === 'subscribe' && token === env.WHATSAPP_VERIFY_TOKEN) {
+        if (mode === 'subscribe' && token === process.env.WEBHOOK_VERIFY_TOKEN) {
           console.log('✅ Webhook verified successfully!');
           res.status(200).send(challenge);
           return;
