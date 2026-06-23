@@ -51,6 +51,66 @@ app.get('/health', (req, res) => {
 app.get('/webhook', WebhookController.verifyWebhook);
 app.post('/webhook', WebhookController.handleWebhook);
 
+app.get('/webhook/diagnose', async (req, res) => {
+  try {
+    const axios = require('axios');
+    const mask = (str: string | undefined) => {
+      if (!str) return 'undefined';
+      if (str.length <= 8) return '***';
+      return str.substring(0, 4) + '...' + str.substring(str.length - 4);
+    };
+
+    const info = {
+      PORT: process.env.PORT,
+      NODE_ENV: process.env.NODE_ENV,
+      DATABASE_URL_PRESENT: !!process.env.DATABASE_URL,
+      WEBHOOK_VERIFY_TOKEN_PRESENT: !!process.env.WEBHOOK_VERIFY_TOKEN,
+      WHATSAPP_VERIFY_TOKEN: mask(process.env.WHATSAPP_VERIFY_TOKEN),
+      WHATSAPP_API_TOKEN: mask(process.env.WHATSAPP_API_TOKEN),
+      WHATSAPP_TOKEN: mask(process.env.WHATSAPP_TOKEN),
+      PHONE_NUMBER_ID: mask(process.env.PHONE_NUMBER_ID),
+    };
+
+    const target = '966563104828';
+    const testSend = async (phoneId: string | undefined, token: string | undefined) => {
+      if (!phoneId || !token || token.includes('placeholder')) return { success: false, error: 'Missing or placeholder token' };
+      if (!phoneId || phoneId.includes('placeholder')) return { success: false, error: 'Missing or placeholder phoneId' };
+      try {
+        const response = await axios.post(
+          `https://graph.facebook.com/v18.0/${phoneId}/messages`,
+          {
+            messaging_product: 'whatsapp',
+            to: target,
+            type: 'text',
+            text: { body: 'رسالة تشخيصية' }
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+        return { success: true, status: response.status, data: response.data };
+      } catch (err: any) {
+        return { success: false, status: err.response?.status, data: err.response?.data, error: err.message };
+      }
+    };
+
+    const resultToken = await testSend(process.env.PHONE_NUMBER_ID, process.env.WHATSAPP_TOKEN);
+    const resultApiToken = await testSend(process.env.PHONE_NUMBER_ID, process.env.WHATSAPP_API_TOKEN);
+
+    res.status(200).json({
+      info,
+      resultToken,
+      resultApiToken
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 // Public Auth Route
 app.post('/api/auth/login', AuthController.login);
 
