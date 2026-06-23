@@ -41,6 +41,14 @@ export class WebhookController {
    */
   public static handleWebhook = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      console.log('📨 Incoming message:', JSON.stringify(req.body, null, 2));
+
+      const entry = req.body.entry?.[0];
+      const change = entry?.changes?.[0];
+      const message = change?.value?.messages?.[0];
+      const from = message?.from;
+      const text = message?.text?.body;
+
       const payload = req.body as WhatsAppWebhookPayload;
 
       // Meta verification: ensure payload is for whatsapp business account

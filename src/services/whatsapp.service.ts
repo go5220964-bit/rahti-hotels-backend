@@ -1,4 +1,5 @@
 import prisma from './prisma';
+import axios from 'axios';
 import { RequestType, RequestStatus, ApprovalStatus, Role } from '../types';
 import { WhatsAppWebhookPayload, ParsedWhatsAppMessage } from '../types';
 import { RequestService } from './request.service';
@@ -121,8 +122,20 @@ export class WhatsAppService {
     console.log(`💬 Processing WhatsApp message from ${parsed.senderNumber} (${parsed.senderName})`);
 
     // 1. Authenticate user by phone number
-    const user = await prisma.user.findUnique({
-      where: { phoneNumber: parsed.senderNumber },
+    const searchNumber = parsed.senderNumber;
+    const alternatives = [searchNumber];
+    if (searchNumber.startsWith('+')) {
+      alternatives.push(searchNumber.substring(1));
+    } else {
+      alternatives.push('+' + searchNumber);
+    }
+
+    const user = await prisma.user.findFirst({
+      where: {
+        phoneNumber: {
+          in: alternatives
+        }
+      },
       include: { branch: true },
     });
 
@@ -2801,7 +2814,7 @@ export class WhatsAppService {
 
   public static mockSendWhatsAppMessage(to: string, text: string): void {
     console.log('\n======================================================');
-    console.log(`📤 MOCK SEND WHATSAPP MESSAGE`);
+    console.log(`📤 MOCK SEND WHATSAPP MESSAGE (Redirecting to Real API)`);
     console.log(`To: ${to}`);
     console.log(`Message:\n${text}`);
     console.log('======================================================\n');
@@ -2811,6 +2824,9 @@ export class WhatsAppService {
     } catch (e) {
       // ignore circular require issues or missing controllers in other modules
     }
+    this.sendWhatsAppMessage(to, text).catch(err => {
+      console.error('Failed to send real WhatsApp message from mock helper:', err.message);
+    });
   }
 
   private static async handleLFSession(parsed: ParsedWhatsAppMessage, user: any): Promise<string> {
@@ -3195,9 +3211,34 @@ export class WhatsAppService {
   }
 
   public static async sendWhatsAppMessage(to: string, text: string): Promise<void> {
-    console.log(`[WhatsApp Bot] Sending message to ${to}:\n${text}`);
-    const { WebhookController } = require('../controllers/webhook.controller');
-    WebhookController.sentMessages.push({ to, text });
+    console.log(`[WhatsApp Bot] Sending REAL message to ${to}:\n${text}`);
+    try {
+      try {
+        const { WebhookController } = require('../controllers/webhook.controller');
+        WebhookController.sentMessages.push({ to, text });
+      } catch (e) {
+        // ignore circular require
+      }
+
+      const response = await axios.post(
+        `https://graph.facebook.com/v18.0/${process.env.PHONE_NUMBER_ID}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          to: to,
+          type: 'text',
+          text: { body: text }
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      console.log('✅ Real WhatsApp message sent. Status:', response.status);
+    } catch (error: any) {
+      console.error('❌ Error sending WhatsApp message:', error?.response?.data || error.message);
+    }
   }
 }
 
