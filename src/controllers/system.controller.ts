@@ -24,10 +24,11 @@ export class SystemController {
 
   public static updateSettings = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { settings } = req.body; // e.g. { whatsapp_token: '...', gemini_api_key: '...', attendance_buffer_minutes: '30' }
+      const settingsObj = req.body.settings || req.body || {};
       const user = (req as any).user || { id: 'system' };
 
-      for (const [key, value] of Object.entries(settings)) {
+      for (const [key, value] of Object.entries(settingsObj)) {
+        if (typeof value === 'object' && value !== null) continue;
         await prisma.systemSetting.upsert({
           where: { key },
           update: { value: String(value), updatedBy: user.id },
@@ -40,7 +41,7 @@ export class SystemController {
         'UPDATE_SETTINGS',
         'SystemSetting',
         'global',
-        settings,
+        settingsObj,
         req.ip
       );
 
