@@ -50,6 +50,15 @@ app.get('/health', (req, res) => {
 // ✅ Webhook FIRST - no auth middleware
 app.get('/webhook', WebhookController.verifyWebhook);
 app.post('/webhook', WebhookController.handleWebhook);
+app.get('/webhook/test-send', async (req, res) => {
+  try {
+    const { WhatsAppService } = require('./services/whatsapp.service');
+    await WhatsAppService.sendWhatsAppMessage('966563104828', 'رسالة تجريبية من الخادم');
+    res.status(200).json({ success: true, message: 'Message send initiated' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 // Public Auth Route
 app.post('/api/auth/login', AuthController.login);
