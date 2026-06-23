@@ -47,7 +47,7 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// WhatsApp Webhook Routes
+// ✅ Webhook FIRST - no auth middleware
 app.get('/webhook', WebhookController.verifyWebhook);
 app.post('/webhook', WebhookController.handleWebhook);
 
