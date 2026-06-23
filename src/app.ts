@@ -216,6 +216,38 @@ app.get('/webhook/debug-msg-status', async (req, res) => {
   }
 });
 
+app.get('/webhook/subscribe-app', async (req, res) => {
+  try {
+    const axios = require('axios');
+    const phoneId = process.env.PHONE_NUMBER_ID;
+    const token = process.env.WHATSAPP_TOKEN;
+    
+    console.log(`Subscribing app to phoneId: ${phoneId}`);
+    
+    const response = await axios.post(
+      `https://graph.facebook.com/v18.0/${phoneId}/subscribed_apps`,
+      {},
+      {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    );
+    
+    res.status(200).json({
+      success: true,
+      status: response.status,
+      data: response.data
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      data: error.response?.data
+    });
+  }
+});
+
 // Public Auth Route
 app.post('/api/auth/login', AuthController.login);
 
