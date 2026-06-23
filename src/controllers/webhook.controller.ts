@@ -42,6 +42,13 @@ export class WebhookController {
   public static handleWebhook = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       console.log('📨 Incoming message:', JSON.stringify(req.body, null, 2));
+      WebhookController.incomingPayloads.push({
+        time: new Date().toISOString(),
+        body: req.body
+      });
+      if (WebhookController.incomingPayloads.length > 50) {
+        WebhookController.incomingPayloads.shift();
+      }
 
       const entry = req.body.entry?.[0];
       const change = entry?.changes?.[0];
@@ -90,6 +97,7 @@ export class WebhookController {
   };
 
   public static sentMessages: { to: string; text: string }[] = [];
+  public static incomingPayloads: any[] = [];
 
   /**
    * Stub helper mimicking sending a WhatsApp message via Meta Cloud API.

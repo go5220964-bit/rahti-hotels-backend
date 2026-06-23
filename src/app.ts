@@ -110,6 +110,9 @@ app.get('/webhook/diagnose', async (req, res) => {
   }
 });
 
+app.get('/webhook/payloads', (req, res) => {
+  res.json(WebhookController.incomingPayloads);
+});
 
 // Public Auth Route
 app.post('/api/auth/login', AuthController.login);
