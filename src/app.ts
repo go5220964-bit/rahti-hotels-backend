@@ -186,6 +186,36 @@ app.get('/webhook/send-template', async (req, res) => {
   }
 });
 
+app.get('/webhook/debug-msg-status', async (req, res) => {
+  try {
+    const axios = require('axios');
+    const token = process.env.WHATSAPP_TOKEN;
+    const msgId = req.query.msgId || 'wamid.HBgMOTY2NTYzMTA0ODI4FQIAERgSRjk5RkU3MjM5N0UxOEVDM0I2AA==';
+    
+    console.log(`Querying message status for ID: ${msgId}`);
+    
+    const response = await axios.get(
+      `https://graph.facebook.com/v18.0/${msgId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    );
+    
+    res.status(200).json({
+      success: true,
+      data: response.data
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      data: error.response?.data
+    });
+  }
+});
+
 // Public Auth Route
 app.post('/api/auth/login', AuthController.login);
 
