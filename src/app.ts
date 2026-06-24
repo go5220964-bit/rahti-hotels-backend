@@ -4,6 +4,7 @@ import env from './config/environment';
 import { RequestController, createRequestSchema, updateRequestSchema, getRequestsQuerySchema } from './controllers/request.controller';
 import { InventoryController, createInventorySchema, updateInventorySchema, getInventoryQuerySchema } from './controllers/inventory.controller';
 import { WebhookController } from './controllers/webhook.controller';
+import { WhatsAppService } from './services/whatsapp.service';
 import { BranchController, createBranchSchema, updateBranchSchema } from './controllers/branch.controller';
 import { UserController, createUserSchema, updateUserSchema, transferBranchSchema } from './controllers/user.controller';
 import { SystemController } from './controllers/system.controller';
@@ -251,6 +252,22 @@ app.get('/webhook/subscribe-app', async (req, res) => {
 // Public Auth Route
 app.post('/api/auth/login', AuthController.login);
 
+// Public Geolocation Attendance & Profile Routes
+app.post('/api/attendance/check-in', validate(attendanceRecordSchema), AttendanceController.checkIn);
+app.post('/api/attendance/check-out', validate(attendanceRecordSchema), AttendanceController.checkOut);
+app.get('/api/users/:id/public-profile', UserController.getPublicProfile);
+
+app.get('/api/test-twilio', async (req, res) => {
+  try {
+    const to = (req.query.to as string) || '+966563104828';
+    const text = (req.query.text as string) || 'رسالة تجريبية من نظام راحتي';
+    await WhatsAppService.sendWhatsAppMessage(to, text);
+    res.json({ success: true, message: 'Twilio call executed' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Global Authentication Guard for all subsequent routes
 app.use(verifyToken);
 
@@ -311,8 +328,6 @@ app.patch('/api/shifts/:id', validate(updateShiftSchema), ShiftController.update
 app.delete('/api/shifts/:id', ShiftController.delete);
 
 // Attendance API Routes
-app.post('/api/attendance/check-in', validate(attendanceRecordSchema), AttendanceController.checkIn);
-app.post('/api/attendance/check-out', validate(attendanceRecordSchema), AttendanceController.checkOut);
 app.get('/api/attendance/today', AttendanceController.getToday);
 app.get('/api/attendance/history/:userId', AttendanceController.getHistory);
 app.get('/api/attendance/summary', AttendanceController.getSummary);

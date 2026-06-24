@@ -98,10 +98,10 @@ export class GeoService {
       distanceMeters = minDistance;
     }
 
-    // 3. Strict 200m geofence check
-    const isValid = distanceMeters <= 200; // strictly 200m as requested
+    // 3. Branch-specific geofence check
+    const isValid = distanceMeters <= radiusLimit;
     if (!isValid) {
-      throw new AppError(400, 'OUT_OF_GEOFENCE', `❌ فشل تسجيل الحضور: أنت خارج النطاق الجغرافي المسموح به للفرع (تبعد ${Math.round(distanceMeters)} متر، والحد الأقصى هو 200 متر).`);
+      throw new AppError(400, 'OUT_OF_GEOFENCE', `❌ فشل تسجيل الحضور: أنت خارج النطاق الجغرافي المسموح به للفرع (تبعد ${Math.round(distanceMeters)} متر، والحد الأقصى هو ${radiusLimit} متر).`);
     }
 
     // 4. Match Shift and determine status

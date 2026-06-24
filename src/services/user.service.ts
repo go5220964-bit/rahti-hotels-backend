@@ -20,10 +20,12 @@ export class UserService {
       throw new AppError(400, 'PHONE_NUMBER_TAKEN', `رقم الهاتف ${data.phoneNumber} مسجل مسبقاً لموظف آخر.`);
     }
 
-    // Verify branch exists
-    const branch = await prisma.branch.findUnique({ where: { id: data.branchId } });
-    if (!branch) {
-      throw new AppError(404, 'BRANCH_NOT_FOUND', `الفرع المحدد غير موجود.`);
+    // Verify branch exists if provided
+    if (data.branchId) {
+      const branch = await prisma.branch.findUnique({ where: { id: data.branchId } });
+      if (!branch) {
+        throw new AppError(404, 'BRANCH_NOT_FOUND', `الفرع المحدد غير موجود.`);
+      }
     }
 
     return await prisma.user.create({
@@ -31,7 +33,7 @@ export class UserService {
         name: data.name,
         role: data.role as any,
         phoneNumber: data.phoneNumber,
-        branchId: data.branchId,
+        branchId: data.branchId || null,
         employeeType: (data.employeeType || 'Fixed') as any,
         email: data.email || null,
         botEnabled: true,
@@ -68,11 +70,15 @@ export class UserService {
     }
 
     if (data.branchId !== undefined) {
-      const branch = await prisma.branch.findUnique({ where: { id: data.branchId } });
-      if (!branch) {
-        throw new AppError(404, 'BRANCH_NOT_FOUND', `الفرع المحدد غير موجود.`);
+      if (data.branchId) {
+        const branch = await prisma.branch.findUnique({ where: { id: data.branchId } });
+        if (!branch) {
+          throw new AppError(404, 'BRANCH_NOT_FOUND', `الفرع المحدد غير موجود.`);
+        }
+        updateData.branchId = data.branchId;
+      } else {
+        updateData.branchId = null;
       }
-      updateData.branchId = data.branchId;
     }
 
     return await prisma.user.update({
@@ -123,5 +129,16 @@ export class UserService {
       data: { branchId: newBranchId },
       include: { branch: true }
     });
+  }
+
+  public static async getUserById(id: string) {
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: { branch: true }
+    });
+    if (!user) {
+      throw new AppError(404, 'USER_NOT_FOUND', 'المستخدم غير موجود.');
+    }
+    return user;
   }
 }

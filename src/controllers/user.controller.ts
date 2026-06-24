@@ -9,7 +9,7 @@ export const createUserSchema = z.object({
     name: z.string().min(1, 'Name is required'),
     role: z.string().min(1, 'Role is required'),
     phoneNumber: z.string().min(1, 'Phone number is required'),
-    branchId: z.string().min(1, 'Branch ID is required'),
+    branchId: z.string().nullable().optional(),
     employeeType: z.string().optional(),
     email: z.string().optional()
   })
@@ -20,7 +20,7 @@ export const updateUserSchema = z.object({
     name: z.string().min(1).optional(),
     role: z.string().min(1).optional(),
     phoneNumber: z.string().min(1).optional(),
-    branchId: z.string().min(1).optional(),
+    branchId: z.string().nullable().optional(),
     employeeType: z.string().optional(),
     email: z.string().optional(),
     botEnabled: z.boolean().optional()
@@ -136,6 +136,23 @@ export class UserController {
       const response: ApiResponse = {
         success: true,
         data: updatedUser
+      };
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public static getPublicProfile = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const user = await UserService.getUserById(id);
+      const response: ApiResponse = {
+        success: true,
+        data: {
+          name: user.name,
+          role: user.role
+        }
       };
       res.status(200).json(response);
     } catch (error) {

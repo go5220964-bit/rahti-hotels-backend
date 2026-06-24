@@ -228,19 +228,7 @@ export class WhatsAppService {
     const textLower = text.toLowerCase();
     if (parsed.messageType === 'text' && (text === 'طلب' || text === 'قائمة' || text === 'جاهز' || textLower === 'menu')) {
       this.clearUserSessions(user.phoneNumber);
-      const menuText = `مرحباً ${user.name} 👋\n` +
-                       `اختر نوع طلبك:\n\n` +
-                       `1️⃣ 🛠️ طلب صيانة عامة\n` +
-                       `2️⃣ 🧹 نظافة وتجهيز الغرف\n` +
-                       `3️⃣ 📦 طلب من المستودع\n` +
-                       `4️⃣ 🛒 طلب شراء خارجي\n` +
-                       `5️⃣ 💻 دعم فني وتقني\n` +
-                       `6️⃣ 🛎️ تسجيل مفقودات\n` +
-                       `7️⃣ 💥 تسجيل تلفيات\n` +
-                       `8️⃣ 💰 طلب سلفة\n` +
-                       `9️⃣ 🏖️ طلب إجازة\n` +
-                       `🔟 📋 طلب آخر (إداري)\n\n` +
-                       `أرسل رقم الخيار:`;
+      const { menuText } = await WhatsAppService.getDynamicMenu(user);
       this.requestMenuSessions.set(user.phoneNumber, true);
       return menuText;
     }
@@ -252,10 +240,7 @@ export class WhatsAppService {
 
     // Handle location messages
     if (parsed.messageType === 'location') {
-      if (this.attendanceSessions.has(user.phoneNumber)) {
-        return await this.handleAttendanceLocation(parsed, user);
-      }
-      return `📍 تم استلام موقعك الجغرافي، ولكن لم نتمكن من ربطه بجلسة حضور/انصراف جارية. يرجى إرسال كلمة "حضور" أو "انصراف" أولاً.`;
+      return `❌ تسجيل الحضور عبر إرسال الموقع الجغرافي مباشرة ملغى لتفادي التزييف. يرجى استخدام الرابط المخصص لتسجيل بصمة الحضور/الانصراف الخاص بك.`;
     }
 
     // Maintenance Sessions routing
@@ -424,12 +409,21 @@ export class WhatsAppService {
       return `📦 اذكر القطع المطلوبة:`;
     }
 
-    // Check request menu selections (1-9)
+    // Check request menu selections (1-10)
     if (this.requestMenuSessions.has(user.phoneNumber)) {
       const selection = text;
       this.requestMenuSessions.delete(user.phoneNumber);
 
-      if (selection === '1') {
+      const { enabledOptions } = await WhatsAppService.getDynamicMenu(user);
+      const index = parseInt(selection, 10) - 1;
+
+      if (isNaN(index) || index < 0 || index >= enabledOptions.length) {
+        return `⚠️ خيار غير صحيح. يرجى إرسال كلمة "طلب" لعرض قائمة الخيارات الحالية واختيار رقم صحيح.`;
+      }
+
+      const actualSelection = enabledOptions[index].id;
+
+      if (actualSelection === '1') {
         this.maintenanceSessions.set(user.phoneNumber, { step: 1, branchId: user.branchId });
         return `🛠️ اختر نوع العطل:\n` +
                `1️⃣ كهرباء ⚡\n` +
@@ -439,10 +433,10 @@ export class WhatsAppService {
                `5️⃣ نظافة وتجهيز 🧹\n` +
                `6️⃣ عام 🔧\n\n` +
                `أرسل رقم الخيار:`;
-      } else if (selection === '2') {
+      } else if (actualSelection === '2') {
         this.maintenanceSessions.set(user.phoneNumber, { step: 2, branchId: user.branchId, category: 'Cleaning' });
         return `📍 أدخل موقع العطل (رقم الغرفة أو وصف المكان):`;
-      } else if (selection === '3') {
+      } else if (actualSelection === '3') {
         const items = await prisma.item.findMany({
           include: { category: true },
           orderBy: { id: 'asc' }
@@ -459,43 +453,46 @@ export class WhatsAppService {
           msg += `${idx + 1}️⃣ ${item.name} (${item.unit})\n`;
         });
         return msg;
-      } else if (selection === '4') {
+      } else if (actualSelection === '4') {
         this.procurementSessions.set(user.phoneNumber, { step: 1, branchId: user.branchId });
         return `🛒 يرجى إدخال اسم الصنف أو الوصف المطلوب شراؤه:`;
-      } else if (selection === '5') {
+      } else if (actualSelection === '5') {
+        this.adminRequestSessions.set(user.phoneNumber, true);
         return `💻 تم فتح بلاغ دعم فني وتقني. يرجى إدخال تفاصيل المشكلة (مثال: عطل في شبكة الواي فاي بالاستقبال):`;
-      } else if (selection === '6') {
+      } else if (actualSelection === '6') {
         this.lfSessions.set(user.phoneNumber, { step: 1 });
         return `🛎️ ماذا تريد تسجيل؟\n` +
                `1️⃣ عثرت على غرض مفقود\n` +
                `2️⃣ عميل يبحث عن غرض مفقود`;
-      } else if (selection === '7') {
+      } else if (actualSelection === '7') {
         this.dmgSessions.set(user.phoneNumber, { step: 1 });
         return `💥 رقم الغرفة التي حدث فيها التلف:`;
-      } else if (selection === '8') {
+      } else if (actualSelection === '8') {
         this.loanSessions.set(user.phoneNumber, { step: 1 });
         return `أدخل مبلغ السلفة المطلوب (بالريال):`;
-      } else if (selection === '9') {
+      } else if (actualSelection === '9') {
         this.leaveSessions.set(user.phoneNumber, { step: 1 });
         return `اختر نوع الإجازة:\n` +
                `1️⃣ سنوية (رصيدك: ${user.annualLeaveBalance} يوم)\n` +
                `2️⃣ مرضية (رصيدك: ${user.sickLeaveBalance} يوم)\n` +
                `3️⃣ طارئة\n` +
                `4️⃣ بدون راتب`;
-      } else if (selection === '10') {
+      } else if (actualSelection === '10') {
         this.adminRequestSessions.set(user.phoneNumber, true);
         return `📋 يرجى إدخال تفاصيل طلبك الإداري:`;
       }
     }
 
     if (text === 'حضور') {
-      this.attendanceSessions.set(user.phoneNumber, 'CheckIn');
-      return `لتسجيل حضورك، أرسل موقعك الحالي 📍`;
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+      return `للتحقق وتسجيل حضورك، يرجى الضغط على الرابط التالي وتأكيد موقعك الجغرافي:\n` +
+             `${frontendUrl}/attendance/check-in?userId=${user.id}&type=CheckIn`;
     }
 
     if (text === 'انصراف') {
-      this.attendanceSessions.set(user.phoneNumber, 'CheckOut');
-      return `لتسجيل انصرافك، أرسل موقعك الحالي 📍`;
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+      return `للتحقق وتسجيل انصرافك، يرجى الضغط على الرابط التالي وتأكيد موقعك الجغرافي:\n` +
+             `${frontendUrl}/attendance/check-in?userId=${user.id}&type=CheckOut`;
     }
 
     if (text === 'تقفيلة' || text === 'تقفيل' || textLower === 'shift') {
@@ -537,19 +534,7 @@ export class WhatsAppService {
     // Trigger List Menu (Entry Point)
     if (text === 'طلب' || text === 'قائمة' || text === 'جاهز' || textLower === 'menu') {
       this.clearUserSessions(user.phoneNumber);
-      const menuText = `مرحباً ${user.name} 👋\n` +
-                       `اختر نوع طلبك:\n\n` +
-                       `1️⃣ 🛠️ طلب صيانة عامة\n` +
-                       `2️⃣ 🧹 نظافة وتجهيز الغرف\n` +
-                       `3️⃣ 📦 طلب من المستودع\n` +
-                       `4️⃣ 🛒 طلب شراء خارجي\n` +
-                       `5️⃣ 💻 دعم فني وتقني\n` +
-                       `6️⃣ 🛎️ تسجيل مفقودات\n` +
-                       `7️⃣ 💥 تسجيل تلفيات\n` +
-                       `8️⃣ 💰 طلب سلفة\n` +
-                       `9️⃣ 🏖️ طلب إجازة\n` +
-                       `🔟 📋 طلب آخر (إداري)\n\n` +
-                       `أرسل رقم الخيار:`;
+      const { menuText } = await WhatsAppService.getDynamicMenu(user);
       this.requestMenuSessions.set(user.phoneNumber, true);
       return menuText;
     }
@@ -566,11 +551,27 @@ export class WhatsAppService {
     }
 
     if (text === 'طلب سلفة') {
+      const settings = await prisma.systemSetting.findMany();
+      const settingsMap = settings.reduce((acc: Record<string, string>, curr) => {
+        acc[curr.key] = curr.value;
+        return acc;
+      }, {});
+      if (settingsMap.bot_menu_loan === 'false') {
+        return `❌ عذراً، خدمة طلب السلفة معطلة حالياً من قبل الإدارة.`;
+      }
       this.loanSessions.set(user.phoneNumber, { step: 1 });
       return `أدخل مبلغ السلفة المطلوب (بالريال):`;
     }
 
     if (text === 'طلب إجازة') {
+      const settings = await prisma.systemSetting.findMany();
+      const settingsMap = settings.reduce((acc: Record<string, string>, curr) => {
+        acc[curr.key] = curr.value;
+        return acc;
+      }, {});
+      if (settingsMap.bot_menu_leave === 'false') {
+        return `❌ عذراً، خدمة طلب الإجازة معطلة حالياً من قبل الإدارة.`;
+      }
       this.leaveSessions.set(user.phoneNumber, { step: 1 });
       return `اختر نوع الإجازة:\n` +
              `1️⃣ سنوية (رصيدك: ${user.annualLeaveBalance} يوم)\n` +
@@ -580,11 +581,27 @@ export class WhatsAppService {
     }
 
     if (text === 'بلاغ تلف') {
+      const settings = await prisma.systemSetting.findMany();
+      const settingsMap = settings.reduce((acc: Record<string, string>, curr) => {
+        acc[curr.key] = curr.value;
+        return acc;
+      }, {});
+      if (settingsMap.bot_menu_damage === 'false') {
+        return `❌ عذراً، خدمة تسجيل التلفيات معطلة حالياً من قبل الإدارة.`;
+      }
       this.dmgSessions.set(user.phoneNumber, { step: 1 });
       return `💥 رقم الغرفة التي حدث فيها التلف:`;
     }
 
     if (text === 'بلاغ مفقود' || text === 'تسجيل مفقودات') {
+      const settings = await prisma.systemSetting.findMany();
+      const settingsMap = settings.reduce((acc: Record<string, string>, curr) => {
+        acc[curr.key] = curr.value;
+        return acc;
+      }, {});
+      if (settingsMap.bot_menu_lostfound === 'false') {
+        return `❌ عذراً، خدمة تسجيل المفقودات معطلة حالياً من قبل الإدارة.`;
+      }
       this.lfSessions.set(user.phoneNumber, { step: 1 });
       return `🛎️ ماذا تريد تسجيل؟\n` +
              `1️⃣ عثرت على غرض مفقود\n` +
@@ -3284,6 +3301,43 @@ export class WhatsAppService {
       const { WebhookController } = require('../controllers/webhook.controller');
       WebhookController.sentMessages.push({ to: recipient.phoneNumber, text: message });
     }
+  }
+
+  private static async getDynamicMenu(user: any): Promise<{ menuText: string; enabledOptions: any[] }> {
+    const settings = await prisma.systemSetting.findMany();
+    const settingsMap = settings.reduce((acc: Record<string, string>, curr) => {
+      acc[curr.key] = curr.value;
+      return acc;
+    }, {});
+
+    const ALL_MENU_OPTIONS = [
+      { id: '1', settingKey: 'bot_menu_maintenance', emoji: '🛠️', label: 'طلب صيانة عامة' },
+      { id: '2', settingKey: 'bot_menu_cleaning', emoji: '🧹', label: 'نظافة وتجهيز الغرف' },
+      { id: '3', settingKey: 'bot_menu_warehouse', emoji: '📦', label: 'طلب من المستودع' },
+      { id: '4', settingKey: 'bot_menu_procurement', emoji: '🛒', label: 'طلب شراء خارجي' },
+      { id: '5', settingKey: 'bot_menu_techsupport', emoji: '💻', label: 'دعم فني وتقني' },
+      { id: '6', settingKey: 'bot_menu_lostfound', emoji: '🛎️', label: 'تسجيل مفقودات' },
+      { id: '7', settingKey: 'bot_menu_damage', emoji: '💥', label: 'تسجيل تلفيات' },
+      { id: '8', settingKey: 'bot_menu_loan', emoji: '💰', label: 'طلب سلفة' },
+      { id: '9', settingKey: 'bot_menu_leave', emoji: '🏖️', label: 'طلب إجازة' },
+      { id: '10', settingKey: 'bot_menu_other', emoji: '📋', label: 'طلب آخر (إداري)' },
+    ];
+
+    const enabledOptions = ALL_MENU_OPTIONS.filter(opt => settingsMap[opt.settingKey] !== 'false');
+
+    let menuText = `مرحباً ${user.name} 👋\n` +
+                   `اختر نوع طلبك:\n\n`;
+
+    const numberEmojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+
+    enabledOptions.forEach((opt, idx) => {
+      const numEmoji = numberEmojis[idx] || `${idx + 1}.`;
+      menuText += `${numEmoji} ${opt.emoji} ${opt.label}\n`;
+    });
+
+    menuText += `\nأرسل رقم الخيار:`;
+
+    return { menuText, enabledOptions };
   }
 
   public static async sendWhatsAppMessage(to: string, text: string): Promise<void> {
