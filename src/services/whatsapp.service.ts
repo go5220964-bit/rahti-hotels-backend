@@ -1,5 +1,6 @@
 import prisma from './prisma';
 import axios from 'axios';
+import twilio from 'twilio';
 import { RequestType, RequestStatus, ApprovalStatus, Role } from '../types';
 import { WhatsAppWebhookPayload, ParsedWhatsAppMessage } from '../types';
 import { RequestService } from './request.service';
@@ -112,6 +113,81 @@ export class WhatsAppService {
       }
     }
 
+    return messages;
+  }
+
+  /**
+   * Parse the Twilio URL-encoded webhook payload into a simplified format.
+   */
+  public static parseTwilioWebhookPayload(body: any): ParsedWhatsAppMessage[] {
+    const messages: ParsedWhatsAppMessage[] = [];
+    if (!body || !body.MessageSid) return messages;
+
+    let senderNumber = body.From || '';
+    if (senderNumber.startsWith('whatsapp:')) {
+      senderNumber = senderNumber.replace('whatsapp:', '');
+    }
+
+    const contactName = body.ProfileName || 'مستخدم واتساب';
+    const messageId = body.MessageSid;
+    const timestamp = Math.floor(Date.now() / 1000);
+
+    const parsed: ParsedWhatsAppMessage = {
+      senderNumber,
+      senderName: contactName,
+      messageId,
+      timestamp,
+      messageType: 'text',
+    };
+
+    const textBody = (body.Body || '').trim();
+
+    // Check if body text matches button reply IDs or dynamic patterns
+    const staticButtons = [
+      'confirm_lf_btn', 'cancel_lf_btn', 'confirm_dmg_btn', 'cancel_dmg_btn', 'confirm_loan_submit',
+      'cancel_loan_submit', 'confirm_leave_submit', 'cancel_leave_submit', 'confirm_shift_submit',
+      'cancel_shift_submit', 'confirm_maintenance_submit', 'cancel_maintenance_submit', 'confirm_whr_submit',
+      'cancel_whr_submit', 'start_shift_report', 'menu_request_maintenance', 'menu_request_warehouse',
+      'menu_request_procurement'
+    ];
+
+    const buttonPrefixes = [
+      'lf_contact_btn_', 'dmg_review_btn_', 'dmg_accept_btn_', 'dmg_refuse_btn_', 'dmg_waive_btn_',
+      'approve_loan_req_', 'reject_loan_req_', 'approve_leave_req_', 'reject_leave_req_', 'branch_select_',
+      'start_shift_report_', 'approve_shift_', 'reject_shift_', 'start_external_procurement_', 'approve_proc_',
+      'reject_proc_', 'menu_req_maintenance_', 'menu_req_warehouse_', 'menu_req_procurement_', 'approve_mnt_completion_',
+      'reject_mnt_completion_', 'resume_req_', 'issue_full_', 'issue_partial_', 'reject_whr_',
+      'review_procurement_', 'approve_finance_', 'reject_finance_', 'mark_purchased_btn_', 'confirm_receive_btn_',
+      'approve_req_', 'reject_req_', 'reporter_confirm_yes_', 'reporter_confirm_no_'
+    ];
+
+    const isButton = staticButtons.includes(textBody) || buttonPrefixes.some(prefix => textBody.startsWith(prefix));
+
+    if (isButton) {
+      parsed.messageType = 'button_reply';
+      parsed.buttonId = textBody;
+      parsed.buttonTitle = textBody;
+    }
+    // Check if location message
+    else if (body.Latitude && body.Longitude) {
+      parsed.messageType = 'location';
+      parsed.latitude = parseFloat(body.Latitude);
+      parsed.longitude = parseFloat(body.Longitude);
+    } 
+    // Check if media message
+    else if (body.NumMedia && parseInt(body.NumMedia, 10) > 0) {
+      parsed.messageType = 'media';
+      parsed.mediaId = body.MediaUrl0; // Use URL directly as mediaId
+      parsed.mimeType = body.MediaContentType0 || 'image/jpeg';
+      parsed.caption = textBody;
+    } 
+    // Default text message
+    else {
+      parsed.messageType = 'text';
+      parsed.text = textBody;
+    }
+
+    messages.push(parsed);
     return messages;
   }
 
@@ -3218,6 +3294,28 @@ export class WhatsAppService {
         WebhookController.sentMessages.push({ to, text });
       } catch (e) {
         // ignore circular require
+      }
+
+      if (process.env.WHATSAPP_PROVIDER === 'twilio') {
+        const accountSid = process.env.TWILIO_ACCOUNT_SID;
+        const authToken = process.env.TWILIO_AUTH_TOKEN;
+        const fromNumber = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
+
+        if (!accountSid || !authToken) {
+          throw new Error('Twilio credentials (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN) are missing');
+        }
+
+        const client = twilio(accountSid, authToken);
+        const recipient = to.startsWith('whatsapp:') ? to : `whatsapp:${to}`;
+
+        const response = await client.messages.create({
+          body: text,
+          from: fromNumber,
+          to: recipient,
+        });
+
+        console.log('✅ Real WhatsApp message sent via Twilio. SID:', response.sid);
+        return;
       }
 
       const response = await axios.post(

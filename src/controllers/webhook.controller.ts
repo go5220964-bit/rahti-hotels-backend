@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import env from '../config/environment';
 import { WhatsAppService } from '../services/whatsapp.service';
-import { WhatsAppWebhookPayload } from '../types';
+import { WhatsAppWebhookPayload, ParsedWhatsAppMessage } from '../types';
 
 export class WebhookController {
   /**
@@ -50,27 +50,25 @@ export class WebhookController {
         WebhookController.incomingPayloads.shift();
       }
 
-      const entry = req.body.entry?.[0];
-      const change = entry?.changes?.[0];
-      const message = change?.value?.messages?.[0];
-      const from = message?.from;
-      const text = message?.text?.body;
+      const isTwilio = !!req.body.MessageSid || process.env.WHATSAPP_PROVIDER === 'twilio';
+      let parsedMessages: ParsedWhatsAppMessage[] = [];
 
-      const payload = req.body as WhatsAppWebhookPayload;
-
-      // Meta verification: ensure payload is for whatsapp business account
-      if (payload.object !== 'whatsapp_business_account') {
-        res.status(404).json({ success: false, message: 'Invalid payload origin' });
-        return;
+      if (isTwilio) {
+        parsedMessages = WhatsAppService.parseTwilioWebhookPayload(req.body);
+      } else {
+        const payload = req.body as WhatsAppWebhookPayload;
+        // Meta verification: ensure payload is for whatsapp business account
+        if (payload.object !== 'whatsapp_business_account') {
+          res.status(404).json({ success: false, message: 'Invalid payload origin' });
+          return;
+        }
+        parsedMessages = WhatsAppService.parseWebhookPayload(payload);
       }
 
-      // 1. Parse incoming WhatsApp messages
-      const parsedMessages = WhatsAppService.parseWebhookPayload(payload);
-
       if (parsedMessages.length === 0) {
-        // WhatsApp sent a status update (delivered, read, etc.) instead of a new message.
+        // WhatsApp/Twilio sent a status update or empty message.
         // Respond with 200 to acknowledge receipt.
-        res.status(200).json({ success: true, message: 'Status update acknowledged' });
+        res.status(200).json({ success: true, message: 'Status update/empty payload acknowledged' });
         return;
       }
 
@@ -79,7 +77,7 @@ export class WebhookController {
         try {
           const responseText = await WhatsAppService.processMessage(msg);
           
-          // 3. Send WhatsApp message back to user via Facebook Graph API
+          // 3. Send WhatsApp message back to user
           if (responseText && responseText.trim() !== '') {
             await WhatsAppService.sendWhatsAppMessage(msg.senderNumber, responseText);
           }
@@ -89,7 +87,7 @@ export class WebhookController {
         }
       }
 
-      // Meta expects a 200 OK to stop retrying the delivery of the webhook
+      // Respond with 200 OK to stop retrying the delivery of the webhook
       res.status(200).json({ success: true, message: 'Messages processed successfully' });
     } catch (error) {
       next(error);
