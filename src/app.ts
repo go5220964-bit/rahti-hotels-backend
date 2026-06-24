@@ -70,6 +70,11 @@ app.get('/webhook/diagnose', async (req, res) => {
       WHATSAPP_API_TOKEN: mask(process.env.WHATSAPP_API_TOKEN),
       WHATSAPP_TOKEN: mask(process.env.WHATSAPP_TOKEN),
       PHONE_NUMBER_ID: mask(process.env.PHONE_NUMBER_ID),
+      WHATSAPP_PROVIDER: process.env.WHATSAPP_PROVIDER,
+      TWILIO_ACCOUNT_SID: mask(process.env.TWILIO_ACCOUNT_SID),
+      TWILIO_AUTH_TOKEN: mask(process.env.TWILIO_AUTH_TOKEN),
+      TWILIO_WHATSAPP_NUMBER: process.env.TWILIO_WHATSAPP_NUMBER,
+      sentMessages: WebhookController.sentMessages,
     };
 
     const target = '966563104828';
