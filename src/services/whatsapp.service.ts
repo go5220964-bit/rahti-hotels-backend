@@ -3390,6 +3390,7 @@ export class WhatsAppService {
       console.log('✅ Real WhatsApp message sent. Status:', response.status);
     } catch (error: any) {
       console.error('❌ Error sending WhatsApp message:', error?.response?.data || error.message);
+      throw error;
     }
   }
 }
