@@ -262,17 +262,6 @@ app.post('/api/attendance/check-in', validate(attendanceRecordSchema), Attendanc
 app.post('/api/attendance/check-out', validate(attendanceRecordSchema), AttendanceController.checkOut);
 app.get('/api/users/:id/public-profile', UserController.getPublicProfile);
 
-app.get('/api/test-twilio', async (req, res) => {
-  try {
-    const to = (req.query.to as string) || '+966563104828';
-    const text = (req.query.text as string) || 'رسالة تجريبية من نظام راحتي';
-    await WhatsAppService.sendWhatsAppMessage(to, text);
-    res.json({ success: true, message: 'Twilio call executed' });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
 // Global Authentication Guard for all subsequent routes
 app.use(verifyToken);
 
