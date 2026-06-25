@@ -13,18 +13,43 @@ export class TelegramService {
   private static chatsMap = new Map<number, string>(); // chatId -> phoneNumber
 
   static {
-    // Load persisted chat mapping on startup
+    // 1. Load persisted chat mapping from cache file (if any exists)
     try {
       if (fs.existsSync(CHATS_FILE)) {
         const data = JSON.parse(fs.readFileSync(CHATS_FILE, 'utf8'));
         Object.entries(data).forEach(([chatId, phone]) => {
           this.chatsMap.set(Number(chatId), phone as string);
         });
-        console.log(`[Telegram Bot] Loaded ${this.chatsMap.size} authenticated chat mappings from cache.`);
+        console.log(`[Telegram Bot] Loaded ${this.chatsMap.size} chat mappings from cache file.`);
       }
     } catch (e) {
-      console.error('[Telegram Bot] Failed to load chat mappings:', e);
+      console.error('[Telegram Bot] Failed to load chat mappings from cache:', e);
     }
+
+    // 2. Load persisted chat mappings from PostgreSQL database on startup asynchronously
+    prisma.user.findMany({
+      where: {
+        telegramChatId: { not: null }
+      },
+      select: {
+        phoneNumber: true,
+        telegramChatId: true
+      }
+    }).then(users => {
+      let dbLoaded = 0;
+      users.forEach(user => {
+        if (user.telegramChatId) {
+          const chatIdNum = Number(user.telegramChatId);
+          if (!isNaN(chatIdNum)) {
+            this.chatsMap.set(chatIdNum, user.phoneNumber);
+            dbLoaded++;
+          }
+        }
+      });
+      console.log(`[Telegram Bot] Restored ${dbLoaded} chat mappings from PostgreSQL database.`);
+    }).catch(err => {
+      console.error('[Telegram Bot] Failed to restore chat mappings from DB:', err.message);
+    });
   }
 
   private static saveMappings() {
@@ -87,7 +112,17 @@ export class TelegramService {
     if (body.callback_query) {
       const chatId = body.callback_query.message.chat.id;
       const callbackData = body.callback_query.data;
-      const phoneNumber = this.chatsMap.get(chatId);
+      let phoneNumber = this.chatsMap.get(chatId);
+      
+      if (!phoneNumber) {
+        const dbUser = await prisma.user.findFirst({
+          where: { telegramChatId: String(chatId) }
+        });
+        if (dbUser) {
+          phoneNumber = dbUser.phoneNumber;
+          this.chatsMap.set(chatId, phoneNumber);
+        }
+      }
 
       // Acknowledge the callback query immediately to stop the loading indicator
       try {
@@ -288,7 +323,17 @@ export class TelegramService {
       }
 
       // Check if user is authenticated
-      const phoneNumber = this.chatsMap.get(chatId);
+      let phoneNumber = this.chatsMap.get(chatId);
+      if (!phoneNumber) {
+        const dbUser = await prisma.user.findFirst({
+          where: { telegramChatId: String(chatId) }
+        });
+        if (dbUser) {
+          phoneNumber = dbUser.phoneNumber;
+          this.chatsMap.set(chatId, phoneNumber);
+        }
+      }
+
       if (!phoneNumber) {
         await this.sendAuthPrompt(chatId);
         return;
@@ -450,8 +495,19 @@ export class TelegramService {
       return;
     }
 
+    // Save and persist mapping in memory, local cache file, and DB
     this.chatsMap.set(chatId, user.phoneNumber);
     this.saveMappings();
+
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { telegramChatId: String(chatId) }
+      });
+      console.log(`[Telegram Bot] Saved telegramChatId ${chatId} for user ${user.name} in database.`);
+    } catch (dbErr: any) {
+      console.error('[Telegram Bot] Failed to save telegramChatId to DB:', dbErr.message);
+    }
 
     const welcomeText = `✅ تم التحقق من حسابك بنجاح يا ${user.name}!\nيمكنك الآن إرسال كلمة "طلب" أو "قائمة" لبدء استخدام نظام العمليات.`;
     const removeKeyboard = { remove_keyboard: true };

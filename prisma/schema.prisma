@@ -45,6 +45,7 @@ model User {
   attendanceRecords   AttendanceRecord[]
   botEnabled          Boolean   @default(true)
   email               String?
+  telegramChatId      String?
   isActive            Boolean   @default(true)
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
