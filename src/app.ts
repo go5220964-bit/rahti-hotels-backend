@@ -98,6 +98,7 @@ app.get('/webhook/diagnose', async (req, res) => {
       MESSAGING_PLATFORM: process.env.MESSAGING_PLATFORM,
       TELEGRAM_BOT_TOKEN: mask(process.env.TELEGRAM_BOT_TOKEN),
       BACKEND_URL: process.env.BACKEND_URL,
+      RAILWAY_STATIC_URL: process.env.RAILWAY_STATIC_URL,
       sentMessages: WebhookController.sentMessages,
     };
 
@@ -420,7 +421,8 @@ if (process.env.NODE_ENV !== 'test') {
     // Initialize Telegram Webhook if Messaging Platform is set to telegram
     if (process.env.MESSAGING_PLATFORM === 'telegram') {
       const { TelegramService } = require('./services/telegram.service');
-      const backendUrl = process.env.BACKEND_URL || `http://localhost:${PORT}`;
+      const backendUrl = process.env.BACKEND_URL || 
+                         (process.env.RAILWAY_STATIC_URL ? `https://${process.env.RAILWAY_STATIC_URL}` : `http://localhost:${PORT}`);
       TelegramService.setWebhook(backendUrl);
     }
   });
