@@ -82,32 +82,6 @@ app.get('/webhook/telegram-info', async (req, res) => {
   }
 });
 
-app.get('/webhook/check-db', async (req, res) => {
-  try {
-    const prisma = require('./services/prisma').default;
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        name: true,
-        role: true,
-        phoneNumber: true,
-        telegramChatId: true,
-        isActive: true
-      }
-    });
-    const tickets = await prisma.maintenanceRequest.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-      include: {
-        reporter: { select: { name: true, phoneNumber: true } }
-      }
-    });
-    res.json({ users, tickets });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 app.get('/webhook/diagnose', async (req, res) => {
   try {
     const axios = require('axios');
