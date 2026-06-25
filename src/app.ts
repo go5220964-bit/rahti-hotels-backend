@@ -77,39 +77,8 @@ app.get('/webhook/diagnose', async (req, res) => {
       sentMessages: WebhookController.sentMessages,
     };
 
-    const target = '966563104828';
-    const testSend = async (phoneId: string | undefined, token: string | undefined) => {
-      if (!phoneId || !token || token.includes('placeholder')) return { success: false, error: 'Missing or placeholder token' };
-      if (!phoneId || phoneId.includes('placeholder')) return { success: false, error: 'Missing or placeholder phoneId' };
-      try {
-        const response = await axios.post(
-          `https://graph.facebook.com/v18.0/${phoneId}/messages`,
-          {
-            messaging_product: 'whatsapp',
-            to: target,
-            type: 'text',
-            text: { body: 'رسالة تشخيصية' }
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          }
-        );
-        return { success: true, status: response.status, data: response.data };
-      } catch (err: any) {
-        return { success: false, status: err.response?.status, data: err.response?.data, error: err.message };
-      }
-    };
-
-    const resultToken = await testSend(process.env.PHONE_NUMBER_ID, process.env.WHATSAPP_TOKEN);
-    const resultApiToken = await testSend(process.env.PHONE_NUMBER_ID, process.env.WHATSAPP_API_TOKEN);
-
     res.status(200).json({
-      info,
-      resultToken,
-      resultApiToken
+      info
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
