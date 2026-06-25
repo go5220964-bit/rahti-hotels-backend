@@ -38,6 +38,26 @@ import { HRController } from './controllers/hr.controller';
 const app = express();
 
 // Middleware
+// Global Request Logger Middleware for Webhook Diagnostics
+app.use((req, res, next) => {
+  const logEntry = {
+    time: new Date().toISOString(),
+    method: req.method,
+    path: req.path,
+    headers: req.headers,
+    query: req.query,
+    body: req.body
+  };
+  try {
+    const { WebhookController } = require('./controllers/webhook.controller');
+    WebhookController.incomingPayloads.push(logEntry);
+    if (WebhookController.incomingPayloads.length > 50) {
+      WebhookController.incomingPayloads.shift();
+    }
+  } catch (e) {}
+  next();
+});
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
