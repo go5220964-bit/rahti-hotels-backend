@@ -94,6 +94,34 @@ export class WebhookController {
     }
   };
 
+  /**
+   * POST /webhook/telegram
+   * Receives incoming messages, contact sharing, media, and buttons from Telegram.
+   */
+  public static handleTelegramWebhook = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      console.log('📨 Incoming Telegram update:', JSON.stringify(req.body, null, 2));
+      WebhookController.incomingPayloads.push({
+        time: new Date().toISOString(),
+        platform: 'telegram',
+        body: req.body
+      });
+      if (WebhookController.incomingPayloads.length > 50) {
+        WebhookController.incomingPayloads.shift();
+      }
+
+      // Process update in background to respond to Telegram immediately
+      const { TelegramService } = require('../services/telegram.service');
+      TelegramService.handleWebhook(req.body).catch((err: any) => {
+        console.error('🔴 Error handling Telegram webhook update:', err);
+      });
+
+      res.status(200).json({ success: true, message: 'Telegram update received' });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   public static sentMessages: { to: string; text: string }[] = [];
   public static incomingPayloads: any[] = [];
 

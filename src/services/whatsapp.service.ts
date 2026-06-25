@@ -3350,6 +3350,18 @@ export class WhatsAppService {
         // ignore circular require
       }
 
+      if (process.env.MESSAGING_PLATFORM === 'telegram') {
+        const { TelegramService } = require('./telegram.service');
+        const chatId = TelegramService.getChatIdByPhone(to);
+        if (chatId) {
+          await TelegramService.sendMessage(chatId, text);
+          return;
+        } else {
+          console.warn(`[Telegram Bot] Cannot send message to ${to}: No authenticated chat ID found in mappings.`);
+          return;
+        }
+      }
+
       if (process.env.WHATSAPP_PROVIDER === 'twilio') {
         const accountSid = process.env.TWILIO_ACCOUNT_SID;
         const authToken = process.env.TWILIO_AUTH_TOKEN;

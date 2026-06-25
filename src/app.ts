@@ -71,6 +71,7 @@ app.get('/health', (req, res) => {
 // ✅ Webhook FIRST - no auth middleware
 app.get('/webhook', WebhookController.verifyWebhook);
 app.post('/webhook', WebhookController.handleWebhook);
+app.post('/webhook/telegram', WebhookController.handleTelegramWebhook);
 
 app.get('/webhook/diagnose', async (req, res) => {
   try {
@@ -412,6 +413,13 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`🚀 Rahti Hotels Operations Server is running on port ${PORT}`);
     console.log(`📡 WhatsApp Webhook URL: http://0.0.0.0:${PORT}/webhook`);
     console.log(`⚙️  Verify Token is set to: "${process.env.WEBHOOK_VERIFY_TOKEN}"`);
+
+    // Initialize Telegram Webhook if Messaging Platform is set to telegram
+    if (process.env.MESSAGING_PLATFORM === 'telegram') {
+      const { TelegramService } = require('./services/telegram.service');
+      const backendUrl = process.env.BACKEND_URL || `http://localhost:${PORT}`;
+      TelegramService.setWebhook(backendUrl);
+    }
   });
 }
 
