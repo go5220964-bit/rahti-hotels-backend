@@ -35,7 +35,7 @@ export class MaintenanceService {
     description: string;
     photoUrl?: string;
     priority?: string;
-  }) {
+  }, notifySupervisor = true) {
     const ticketNumber = await this.generateTicketNumber();
     
     const request = (await prisma.maintenanceRequest.create({
@@ -87,12 +87,40 @@ export class MaintenanceService {
       `🕐 *الوقت*: ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}\n\n` +
       `[ 👷 تعيين فني ] (زر: assign_tech_btn_${request.id})`;
 
-    for (const sup of supervisors) {
-      // Future-proof: if MaintenanceSupervisor has branchId set, only notify for that branch
-      if (sup.branchId && sup.branchId !== request.branchId) {
-        continue;
+    if (notifySupervisor) {
+      for (const sup of supervisors) {
+        // Future-proof: if MaintenanceSupervisor has branchId set, only notify for that branch
+        if (sup.branchId && sup.branchId !== request.branchId) {
+          continue;
+        }
+
+        if (process.env.MESSAGING_PLATFORM === 'telegram') {
+          const { TelegramService } = require('./telegram.service');
+          const chatId = TelegramService.getChatIdByPhone(sup.phoneNumber);
+          if (chatId) {
+            const categoryAr = this.translateCategory(request.category);
+            const priorityAr = this.translatePriority(request.priority);
+            const text = `🔔 <b>بلاغ صيانة جديد #${request.ticketNumber}</b>\n\n` +
+              `🏨 <b>الفرع</b>: ${branchNameAr}\n` +
+              `🔧 <b>النوع</b>: ${categoryAr}\n` +
+              `📍 <b>الموقع</b>: ${request.location}\n` +
+              `📝 <b>الوصف</b>: ${request.description}\n` +
+              `⚡ <b>الأولوية</b>: ${priorityAr}\n` +
+              `👤 <b>المُبلِّغ</b>: ${request.reporter.name}\n` +
+              `🕐 <b>الوقت</b>: ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}`;
+
+            const replyMarkup = {
+              inline_keyboard: [
+                [{ text: "👨‍🔧 تعيين فني", callback_data: `assign_tech_${request.id}` }]
+              ]
+            };
+            await TelegramService.sendMessage(chatId, text, replyMarkup);
+            continue;
+          }
+        }
+
+        WhatsAppService.mockSendWhatsAppMessage(sup.phoneNumber, notifyMsg);
       }
-      WhatsAppService.mockSendWhatsAppMessage(sup.phoneNumber, notifyMsg);
     }
 
     return request;

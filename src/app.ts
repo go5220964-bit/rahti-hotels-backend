@@ -95,6 +95,9 @@ app.get('/webhook/diagnose', async (req, res) => {
       TWILIO_ACCOUNT_SID: mask(process.env.TWILIO_ACCOUNT_SID),
       TWILIO_AUTH_TOKEN: mask(process.env.TWILIO_AUTH_TOKEN),
       TWILIO_WHATSAPP_NUMBER: process.env.TWILIO_WHATSAPP_NUMBER,
+      MESSAGING_PLATFORM: process.env.MESSAGING_PLATFORM,
+      TELEGRAM_BOT_TOKEN: mask(process.env.TELEGRAM_BOT_TOKEN),
+      BACKEND_URL: process.env.BACKEND_URL,
       sentMessages: WebhookController.sentMessages,
     };
 
