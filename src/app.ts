@@ -72,6 +72,15 @@ app.get('/health', (req, res) => {
 app.get('/webhook', WebhookController.verifyWebhook);
 app.post('/webhook', WebhookController.handleWebhook);
 app.post('/webhook/telegram', WebhookController.handleTelegramWebhook);
+app.get('/webhook/telegram-info', async (req, res) => {
+  try {
+    const axios = require('axios');
+    const response = await axios.get(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/getWebhookInfo`);
+    res.json(response.data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message, details: err.response?.data });
+  }
+});
 
 app.get('/webhook/diagnose', async (req, res) => {
   try {
