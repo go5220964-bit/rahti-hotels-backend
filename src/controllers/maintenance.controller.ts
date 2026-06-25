@@ -70,7 +70,7 @@ export class MaintenanceController {
             if (sup.branchId && sup.branchId !== request.branchId) {
               continue;
             }
-            const chatId = TelegramService.getChatIdByPhone(sup.phoneNumber);
+            const chatId = sup.telegramChatId || TelegramService.getChatIdByPhone(sup.phoneNumber);
             if (chatId) {
               await TelegramService.sendMessage(chatId, text, replyMarkup);
             }

@@ -96,7 +96,7 @@ export class MaintenanceService {
 
         if (process.env.MESSAGING_PLATFORM === 'telegram') {
           const { TelegramService } = require('./telegram.service');
-          const chatId = TelegramService.getChatIdByPhone(sup.phoneNumber);
+          const chatId = sup.telegramChatId || TelegramService.getChatIdByPhone(sup.phoneNumber);
           if (chatId) {
             const categoryAr = this.translateCategory(request.category);
             const priorityAr = this.translatePriority(request.priority);

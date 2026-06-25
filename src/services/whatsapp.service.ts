@@ -3352,12 +3352,26 @@ export class WhatsAppService {
 
       if (process.env.MESSAGING_PLATFORM === 'telegram') {
         const { TelegramService } = require('./telegram.service');
-        const chatId = TelegramService.getChatIdByPhone(to);
+        let chatId = TelegramService.getChatIdByPhone(to);
+        if (!chatId) {
+          const cleanPhone = to.replace('+', '');
+          const alternatives = [to, cleanPhone, '+' + cleanPhone];
+          const dbUser = await prisma.user.findFirst({
+            where: {
+              phoneNumber: { in: alternatives },
+              telegramChatId: { not: null }
+            },
+            select: { telegramChatId: true }
+          });
+          if (dbUser?.telegramChatId) {
+            chatId = dbUser.telegramChatId;
+          }
+        }
         if (chatId) {
           await TelegramService.sendMessage(chatId, text);
           return;
         } else {
-          console.warn(`[Telegram Bot] Cannot send message to ${to}: No authenticated chat ID found in mappings.`);
+          console.warn(`[Telegram Bot] Cannot send message to ${to}: No authenticated chat ID found in mappings or database.`);
           return;
         }
       }
