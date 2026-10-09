@@ -51,18 +51,24 @@ export class WebhookController {
       }
 
       const isTwilio = !!req.body.MessageSid || process.env.WHATSAPP_PROVIDER === 'twilio';
+      const isUltraMsg = !!req.body.event_type || !!req.body.data?.from || (req.body.data && req.body.data.body !== undefined) || process.env.WHATSAPP_PROVIDER === 'ultramsg';
       let parsedMessages: ParsedWhatsAppMessage[] = [];
 
       if (isTwilio) {
         parsedMessages = WhatsAppService.parseTwilioWebhookPayload(req.body);
+      } else if (isUltraMsg && (req.body.data || req.body.from)) {
+        parsedMessages = WhatsAppService.parseUltraMsgWebhookPayload(req.body);
       } else {
         const payload = req.body as WhatsAppWebhookPayload;
         // Meta verification: ensure payload is for whatsapp business account
-        if (payload.object !== 'whatsapp_business_account') {
-          res.status(404).json({ success: false, message: 'Invalid payload origin' });
+        if (payload.object === 'whatsapp_business_account') {
+          parsedMessages = WhatsAppService.parseWebhookPayload(payload);
+        } else if (req.body.data || req.body.from || req.body.body) {
+          parsedMessages = WhatsAppService.parseUltraMsgWebhookPayload(req.body);
+        } else {
+          res.status(200).json({ success: true, message: 'Payload acknowledged' });
           return;
         }
-        parsedMessages = WhatsAppService.parseWebhookPayload(payload);
       }
 
       if (parsedMessages.length === 0) {

@@ -192,6 +192,83 @@ export class WhatsAppService {
   }
 
   /**
+   * Parse UltraMsg webhook payload into standard ParsedWhatsAppMessage format.
+   */
+  public static parseUltraMsgWebhookPayload(body: any): ParsedWhatsAppMessage[] {
+    const messages: ParsedWhatsAppMessage[] = [];
+    if (!body) return messages;
+
+    const data = body.data || body;
+    if (!data || !data.from) return messages;
+
+    // Ignore messages sent by the bot itself
+    if (data.fromMe === true || data.fromMe === 'true') return messages;
+
+    let senderNumber = data.from || '';
+    if (senderNumber.includes('@')) {
+      senderNumber = senderNumber.split('@')[0];
+    }
+    if (!senderNumber.startsWith('+')) {
+      senderNumber = '+' + senderNumber;
+    }
+
+    const contactName = data.pushname || 'مستخدم واتساب';
+    const messageId = data.id || `msg_${Date.now()}`;
+    const timestamp = data.time ? parseInt(data.time, 10) : Math.floor(Date.now() / 1000);
+
+    const parsed: ParsedWhatsAppMessage = {
+      senderNumber,
+      senderName: contactName,
+      messageId,
+      timestamp,
+      messageType: 'text',
+    };
+
+    const textBody = (data.body || '').trim();
+
+    const staticButtons = [
+      'confirm_lf_btn', 'cancel_lf_btn', 'confirm_dmg_btn', 'cancel_dmg_btn', 'confirm_loan_submit',
+      'cancel_loan_submit', 'confirm_leave_submit', 'cancel_leave_submit', 'confirm_shift_submit',
+      'cancel_shift_submit', 'confirm_maintenance_submit', 'cancel_maintenance_submit', 'confirm_whr_submit',
+      'cancel_whr_submit', 'start_shift_report', 'menu_request_maintenance', 'menu_request_warehouse',
+      'menu_request_procurement'
+    ];
+
+    const buttonPrefixes = [
+      'lf_contact_btn_', 'dmg_review_btn_', 'dmg_accept_btn_', 'dmg_refuse_btn_', 'dmg_waive_btn_',
+      'approve_loan_req_', 'reject_loan_req_', 'approve_leave_req_', 'reject_leave_req_', 'branch_select_',
+      'start_shift_report_', 'approve_shift_', 'reject_shift_', 'start_external_procurement_', 'approve_proc_',
+      'reject_proc_', 'menu_req_maintenance_', 'menu_req_warehouse_', 'menu_req_procurement_', 'approve_mnt_completion_',
+      'reject_mnt_completion_', 'resume_req_', 'issue_full_', 'issue_partial_', 'reject_whr_',
+      'review_procurement_', 'approve_finance_', 'reject_finance_', 'mark_purchased_btn_', 'confirm_receive_btn_',
+      'approve_req_', 'reject_req_', 'reporter_confirm_yes_', 'reporter_confirm_no_'
+    ];
+
+    const isButton = staticButtons.includes(textBody) || buttonPrefixes.some(prefix => textBody.startsWith(prefix));
+
+    if (isButton) {
+      parsed.messageType = 'button_reply';
+      parsed.buttonId = textBody;
+      parsed.buttonTitle = textBody;
+    } else if (data.type === 'image' || data.media) {
+      parsed.messageType = 'media';
+      parsed.mediaId = data.media || data.id;
+      parsed.mimeType = 'image/jpeg';
+      parsed.caption = textBody;
+    } else if (data.lat && data.lng) {
+      parsed.messageType = 'location';
+      parsed.latitude = parseFloat(data.lat);
+      parsed.longitude = parseFloat(data.lng);
+    } else {
+      parsed.messageType = 'text';
+      parsed.text = textBody;
+    }
+
+    messages.push(parsed);
+    return messages;
+  }
+
+  /**
    * Process a parsed message, routing it to the appropriate operation.
    */
   public static async processMessage(parsed: ParsedWhatsAppMessage): Promise<string> {
@@ -3341,7 +3418,7 @@ export class WhatsAppService {
   }
 
   public static async sendWhatsAppMessage(to: string, text: string): Promise<void> {
-    console.log(`[WhatsApp Bot] Sending REAL message to ${to}:\n${text}`);
+    console.log(`[WhatsApp Bot] Sending message to ${to}:\n${text}`);
     try {
       try {
         const { WebhookController } = require('../controllers/webhook.controller');
@@ -3350,6 +3427,76 @@ export class WhatsAppService {
         // ignore circular require
       }
 
+      const provider = (process.env.WHATSAPP_PROVIDER || '').toLowerCase();
+
+      // 1. UltraMsg Provider
+      if (provider === 'ultramsg' || (process.env.ULTRAMSG_INSTANCE_ID && process.env.ULTRAMSG_TOKEN)) {
+        const instanceId = process.env.ULTRAMSG_INSTANCE_ID;
+        const token = process.env.ULTRAMSG_TOKEN;
+        const cleanTo = to.replace('+', '').trim();
+        const recipient = cleanTo.includes('@') ? cleanTo : `${cleanTo}@c.us`;
+
+        const url = `https://api.ultramsg.com/${instanceId}/messages/chat?token=${token}`;
+        const response = await axios.post(
+          url,
+          new URLSearchParams({
+            to: recipient,
+            body: text
+          }).toString(),
+          {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            timeout: 10000
+          }
+        );
+        console.log('✅ Real WhatsApp message sent via UltraMsg:', response.data);
+        return;
+      }
+
+      // 2. Twilio WhatsApp Provider
+      if (provider === 'twilio' || process.env.TWILIO_ACCOUNT_SID) {
+        const accountSid = process.env.TWILIO_ACCOUNT_SID;
+        const authToken = process.env.TWILIO_AUTH_TOKEN;
+        const fromNumber = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
+
+        if (accountSid && authToken) {
+          const client = twilio(accountSid, authToken);
+          const recipient = to.startsWith('whatsapp:') ? to : `whatsapp:${to}`;
+
+          const response = await client.messages.create({
+            body: text,
+            from: fromNumber,
+            to: recipient,
+          });
+
+          console.log('✅ Real WhatsApp message sent via Twilio. SID:', response.sid);
+          return;
+        }
+      }
+
+      // 3. Meta WhatsApp Cloud API Provider
+      if (process.env.PHONE_NUMBER_ID && process.env.WHATSAPP_TOKEN) {
+        const cleanTo = to.replace('+', '').trim();
+        const response = await axios.post(
+          `https://graph.facebook.com/v18.0/${process.env.PHONE_NUMBER_ID}/messages`,
+          {
+            messaging_product: 'whatsapp',
+            to: cleanTo,
+            type: 'text',
+            text: { body: text }
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 10000
+          }
+        );
+        console.log('✅ Real WhatsApp message sent via Meta Cloud API. Status:', response.status);
+        return;
+      }
+
+      // 4. Optional Telegram fallback only if explicitly chosen in config
       if (process.env.MESSAGING_PLATFORM === 'telegram') {
         const { TelegramService } = require('./telegram.service');
         let chatId = TelegramService.getChatIdByPhone(to);
@@ -3370,53 +3517,12 @@ export class WhatsAppService {
         if (chatId) {
           await TelegramService.sendMessage(chatId, text);
           return;
-        } else {
-          console.warn(`[Telegram Bot] Cannot send message to ${to}: No authenticated chat ID found in mappings or database.`);
-          return;
         }
       }
 
-      if (process.env.WHATSAPP_PROVIDER === 'twilio') {
-        const accountSid = process.env.TWILIO_ACCOUNT_SID;
-        const authToken = process.env.TWILIO_AUTH_TOKEN;
-        const fromNumber = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
-
-        if (!accountSid || !authToken) {
-          throw new Error('Twilio credentials (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN) are missing');
-        }
-
-        const client = twilio(accountSid, authToken);
-        const recipient = to.startsWith('whatsapp:') ? to : `whatsapp:${to}`;
-
-        const response = await client.messages.create({
-          body: text,
-          from: fromNumber,
-          to: recipient,
-        });
-
-        console.log('✅ Real WhatsApp message sent via Twilio. SID:', response.sid);
-        return;
-      }
-
-      const response = await axios.post(
-        `https://graph.facebook.com/v18.0/${process.env.PHONE_NUMBER_ID}/messages`,
-        {
-          messaging_product: 'whatsapp',
-          to: to,
-          type: 'text',
-          text: { body: text }
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-      console.log('✅ Real WhatsApp message sent. Status:', response.status);
+      console.log(`ℹ️ [WhatsApp Local/Console Output] Message to ${to}:\n${text}`);
     } catch (error: any) {
       console.error('❌ Error sending WhatsApp message:', error?.response?.data || error.message);
-      throw error;
     }
   }
 }

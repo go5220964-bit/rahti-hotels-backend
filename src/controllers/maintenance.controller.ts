@@ -17,48 +17,49 @@ export class MaintenanceController {
       }, false);
 
       // Send Telegram notification to Maintenance Supervisor if Telegram platform is active
-      if (process.env.MESSAGING_PLATFORM === 'telegram') {
-        try {
-          const prisma = require('../services/prisma').default;
+      try {
+        const prisma = require('../services/prisma').default;
+        const { WhatsAppService } = require('../services/whatsapp.service');
+
+        const supervisors = await prisma.user.findMany({
+          where: {
+            role: 'MaintenanceSupervisor',
+            isActive: true
+          }
+        });
+
+        const branchNameAr = request.branch?.name === 'Sail Road Branch' ? 'فرع طريق السيل' :
+                             request.branch?.name === 'Beachside Resort Branch' ? 'فرع منتجع الشاطئ' :
+                             request.branch?.name || '';
+
+        const categoryTranslation: Record<string, string> = {
+          Electrical: 'كهرباء',
+          Plumbing: 'سباكة',
+          AC: 'تكييف',
+          Carpentry: 'نجارة',
+          Cleaning: 'نظافة',
+          General: 'عام'
+        };
+        const priorityTranslation: Record<string, string> = {
+          Urgent: 'عاجل 🚨',
+          High: 'مرتفع ⚡',
+          Normal: 'عادي ⏱️',
+          Low: 'منخفض 💤'
+        };
+
+        const categoryAr = categoryTranslation[request.category] || request.category;
+        const priorityAr = priorityTranslation[request.priority] || request.priority;
+
+        if (process.env.MESSAGING_PLATFORM === 'telegram') {
           const { TelegramService } = require('../services/telegram.service');
-
-          const supervisors = await prisma.user.findMany({
-            where: {
-              role: 'MaintenanceSupervisor',
-              isActive: true
-            }
-          });
-
-          const branchNameAr = request.branch?.name === 'Sail Road Branch' ? 'فرع طريق السيل' :
-                               request.branch?.name === 'Beachside Resort Branch' ? 'فرع منتجع الشاطئ' :
-                               request.branch?.name || '';
-
-          const categoryTranslation: Record<string, string> = {
-            Electrical: 'كهرباء',
-            Plumbing: 'سباكة',
-            AC: 'تكييف',
-            Carpentry: 'نجارة',
-            Cleaning: 'نظافة',
-            General: 'عام'
-          };
-          const priorityTranslation: Record<string, string> = {
-            Urgent: 'عاجل 🚨',
-            High: 'مرتفع ⚡',
-            Normal: 'عادي ⏱️',
-            Low: 'منخفض 💤'
-          };
-
-          const categoryAr = categoryTranslation[request.category] || request.category;
-          const priorityAr = priorityTranslation[request.priority] || request.priority;
-
-          const text = `🔔 <b>بلاغ صيانة جديد #${request.ticketNumber}</b>\n\n` +
+          const tgText = `🔔 <b>بلاغ صيانة جديد #${request.ticketNumber}</b>\n\n` +
             `🏨 <b>الفرع</b>: ${branchNameAr}\n` +
             `🔧 <b>النوع</b>: ${categoryAr}\n` +
             `📍 <b>الموقع</b>: ${request.location}\n` +
             `📝 <b>الوصف</b>: ${request.description}\n` +
             `⚡ <b>الأولوية</b>: ${priorityAr}\n` +
             `👤 <b>المُبلِّغ</b>: ${request.reporter?.name || ''}\n` +
-            `🕐 <b>الوقت</b>: ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}`
+            `🕐 <b>الوقت</b>: ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}`;
 
           const replyMarkup = {
             inline_keyboard: [
@@ -72,12 +73,30 @@ export class MaintenanceController {
             }
             const chatId = sup.telegramChatId || TelegramService.getChatIdByPhone(sup.phoneNumber);
             if (chatId) {
-              await TelegramService.sendMessage(chatId, text, replyMarkup);
+              await TelegramService.sendMessage(chatId, tgText, replyMarkup);
             }
           }
-        } catch (tgError: any) {
-          console.error('[Maintenance Controller] Failed to send Telegram notification:', tgError.message);
+        } else {
+          // Default: WhatsApp notification
+          const waText = `🔔 *بلاغ صيانة جديد #${request.ticketNumber}*\n\n` +
+            `🏨 *الفرع*: ${branchNameAr}\n` +
+            `🔧 *النوع*: ${categoryAr}\n` +
+            `📍 *الموقع*: ${request.location}\n` +
+            `📝 *الوصف*: ${request.description}\n` +
+            `⚡ *الأولوية*: ${priorityAr}\n` +
+            `👤 *المُبلِّغ*: ${request.reporter?.name || ''}\n` +
+            `🕐 *الوقت*: ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}\n\n` +
+            `[ 👷 تعيين فني ] (زر: assign_tech_btn_${request.id})`;
+
+          for (const sup of supervisors) {
+            if (sup.branchId && sup.branchId !== request.branchId) {
+              continue;
+            }
+            await WhatsAppService.sendWhatsAppMessage(sup.phoneNumber, waText);
+          }
         }
+      } catch (notifyError: any) {
+        console.error('[Maintenance Controller] Failed to send notification:', notifyError.message);
       }
 
       const response: ApiResponse = {

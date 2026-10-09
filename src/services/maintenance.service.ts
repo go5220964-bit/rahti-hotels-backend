@@ -119,7 +119,7 @@ export class MaintenanceService {
           }
         }
 
-        WhatsAppService.mockSendWhatsAppMessage(sup.phoneNumber, notifyMsg);
+        await WhatsAppService.sendWhatsAppMessage(sup.phoneNumber, notifyMsg);
       }
     }
 
