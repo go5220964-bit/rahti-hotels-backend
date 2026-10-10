@@ -66,10 +66,10 @@ export class MaintenanceService {
       }
     });
 
-    // Notify all MaintenanceSupervisors
+    // Notify all MaintenanceSupervisors & Admins
     const supervisors = await prisma.user.findMany({
       where: {
-        role: 'MaintenanceSupervisor'
+        role: { in: ['MaintenanceSupervisor', 'Admin'] }
       }
     });
 
@@ -85,12 +85,13 @@ export class MaintenanceService {
       `⚡ *الأولوية*: ${this.translatePriority(request.priority)}\n` +
       `👤 *المُبلِّغ*: ${request.reporter.name}\n` +
       `🕐 *الوقت*: ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}\n\n` +
-      `[ 👷 تعيين فني ] (زر: assign_tech_btn_${request.id})`;
+      `👷 *لتعيين فني، أرسل كلمة "تعيين" أو الكود أدناه:*\n` +
+      `assign_tech_btn_${request.id}`;
 
     if (notifySupervisor) {
       for (const sup of supervisors) {
-        // Future-proof: if MaintenanceSupervisor has branchId set, only notify for that branch
-        if (sup.branchId && sup.branchId !== request.branchId) {
+        // If MaintenanceSupervisor has branchId set, only notify for that branch (Admins receive all)
+        if (sup.role !== 'Admin' && sup.branchId && sup.branchId !== request.branchId) {
           continue;
         }
 
@@ -130,14 +131,18 @@ export class MaintenanceService {
    * Assigns a technician to a request, updates request status, creates a timeline entry, and notifies the technician.
    */
   public static async assignTechnician(requestId: string, technicianId: string, supervisorId: string) {
-    const request = await prisma.maintenanceRequest.findUnique({
-      where: { id: requestId },
+    const request = await prisma.maintenanceRequest.findFirst({
+      where: {
+        OR: [{ id: requestId }, { ticketNumber: requestId }]
+      },
       include: { branch: true, technician: true }
     });
 
     if (!request) {
       throw new Error('Maintenance request not found');
     }
+
+    const actualId = request.id;
 
     // If there was a previously assigned technician, mark them available
     if (request.assignedTo && request.assignedTo !== technicianId) {
@@ -154,7 +159,7 @@ export class MaintenanceService {
     });
 
     const updatedRequest = await prisma.maintenanceRequest.update({
-      where: { id: requestId },
+      where: { id: actualId },
       data: {
         status: 'AssignedToTechnician',
         assignedTo: technicianId,
@@ -170,7 +175,7 @@ export class MaintenanceService {
     // Create timeline entry
     await prisma.maintenanceTimeline.create({
       data: {
-        requestId,
+        requestId: actualId,
         action: 'Assigned',
         performedBy: supervisorId,
         note: `تم تعيين الفني ${updatedRequest.technician?.name || ''} لمباشرة العطل.`
@@ -196,6 +201,14 @@ export class MaintenanceService {
       WhatsAppService.mockSendWhatsAppMessage(updatedRequest.technician.phoneNumber, techMsg);
     }
 
+    // Notify reporter via WhatsApp
+    if (updatedRequest.reporter && updatedRequest.reporter.phoneNumber) {
+      const reporterMsg = `👨‍🔧 *تحديث بلاغ الصيانة #${updatedRequest.ticketNumber}*\n\n` +
+        `تم تعيين الفني *${updatedRequest.technician?.name || 'المختص'}* لمباشرة بلاغك.\n` +
+        `سيتم البدء في العمل قريباً.`;
+      WhatsAppService.mockSendWhatsAppMessage(updatedRequest.reporter.phoneNumber, reporterMsg);
+    }
+
     return updatedRequest;
   }
 
@@ -203,8 +216,17 @@ export class MaintenanceService {
    * Updates request status to InProgress and creates a timeline entry.
    */
   public static async startWork(requestId: string, technicianId: string) {
+    const existing = await prisma.maintenanceRequest.findFirst({
+      where: {
+        OR: [{ id: requestId }, { ticketNumber: requestId }]
+      }
+    });
+    if (!existing) {
+      throw new Error('Maintenance request not found');
+    }
+
     const request = await prisma.maintenanceRequest.update({
-      where: { id: requestId },
+      where: { id: existing.id },
       data: {
         status: 'InProgress'
       }
@@ -212,7 +234,7 @@ export class MaintenanceService {
 
     await prisma.maintenanceTimeline.create({
       data: {
-        requestId,
+        requestId: existing.id,
         action: 'Started',
         performedBy: technicianId,
         note: 'بدأ الفني العمل الميداني على إصلاح العطل.'

@@ -10,6 +10,11 @@ export class WebhookController {
    */
   public static verifyWebhook = (req: Request, res: Response, next: NextFunction): void => {
     try {
+      if (req.query.ping) {
+        res.status(200).send('pong');
+        return;
+      }
+
       const mode = req.query['hub.mode'];
       const token = req.query['hub.verify_token'];
       const challenge = req.query['hub.challenge'];

@@ -152,6 +152,7 @@ export class WhatsAppService {
     ];
 
     const buttonPrefixes = [
+      'assign_tech_btn_', 'reassign_tech_btn_', 'start_work_req_', 'info_req_', 'complete_req_', 'rating_',
       'lf_contact_btn_', 'dmg_review_btn_', 'dmg_accept_btn_', 'dmg_refuse_btn_', 'dmg_waive_btn_',
       'approve_loan_req_', 'reject_loan_req_', 'approve_leave_req_', 'reject_leave_req_', 'branch_select_',
       'start_shift_report_', 'approve_shift_', 'reject_shift_', 'start_external_procurement_', 'approve_proc_',
@@ -235,6 +236,7 @@ export class WhatsAppService {
     ];
 
     const buttonPrefixes = [
+      'assign_tech_btn_', 'reassign_tech_btn_', 'start_work_req_', 'info_req_', 'complete_req_', 'rating_',
       'lf_contact_btn_', 'dmg_review_btn_', 'dmg_accept_btn_', 'dmg_refuse_btn_', 'dmg_waive_btn_',
       'approve_loan_req_', 'reject_loan_req_', 'approve_leave_req_', 'reject_leave_req_', 'branch_select_',
       'start_shift_report_', 'approve_shift_', 'reject_shift_', 'start_external_procurement_', 'approve_proc_',
@@ -292,8 +294,11 @@ export class WhatsAppService {
       include: { branch: true },
     });
 
+    const text = (parsed.text || '').trim();
+    const textLower = text.toLowerCase();
+
     if (!user) {
-      return `مرحباً بك في نظام عمليات فنادق راحتي. الرقم ${parsed.senderNumber} غير مسجل لدينا. يرجى التواصل مع المسؤول لتسجيل رقمك.`;
+      return `مرحباً بك في نظام عمليات فنادق راحتي 🏨.\n\nعذراً، هذا الرقم (${parsed.senderNumber}) غير مسجل في النظام.\nيرجى مراجعة إدارة الفندق لإضافة رقمك وتحديد صلاحياتك في لوحة التحكم.`;
     }
 
     if (user.botEnabled === false) {
@@ -301,13 +306,67 @@ export class WhatsAppService {
       return '';
     }
 
-    const text = (parsed.text || '').trim();
-    const textLower = text.toLowerCase();
-    if (parsed.messageType === 'text' && (text === 'طلب' || text === 'قائمة' || text === 'جاهز' || textLower === 'menu')) {
+    // Top-level 1: Cancel / Exit command
+    if (parsed.messageType === 'text' && (text === 'إلغاء' || text === 'الغاء' || text === 'خروج' || textLower === 'cancel')) {
+      this.clearUserSessions(user.phoneNumber);
+      return `❌ تم إلغاء العملية الحالية بنجاح.\n\nأرسل كلمة *طلب* لعرض قائمة الخيارات، أو *قائمة* للقائمة الرئيسية.`;
+    }
+
+    // Top-level 2: Direct Maintenance command (e.g. "طلب صيانة", "صيانة")
+    if (parsed.messageType === 'text' && (
+      text === 'طلب صيانة' || text === 'طلب صيانه' || text === 'صيانة' || text === 'صيانه'
+    )) {
+      this.clearUserSessions(user.phoneNumber);
+      const branchId = user.branchId || (await prisma.branch.findFirst())?.id || '';
+      this.maintenanceSessions.set(user.phoneNumber, { step: 1, branchId });
+      return `🛠️ اختر نوع العطل:\n` +
+             `1️⃣ كهرباء ⚡\n` +
+             `2️⃣ سباكة 🚿\n` +
+             `3️⃣ تكييف ❄️\n` +
+             `4️⃣ نجارة 🪚\n` +
+             `5️⃣ نظافة وتجهيز 🧹\n` +
+             `6️⃣ عام 🔧\n\n` +
+             `أرسل رقم الخيار:`;
+    }
+
+    // Top-level 3: Menu command
+    const isMenuCommand = parsed.messageType === 'text' && (
+      text === 'طلب' ||
+      text === 'الطلب' ||
+      text === 'طلبات' ||
+      text === 'قائمة' ||
+      text === 'القائمة' ||
+      text === 'جاهز' ||
+      text === 'خدمات' ||
+      textLower === 'menu' ||
+      textLower === 'help' ||
+      text === 'مساعدة'
+    );
+    if (isMenuCommand) {
       this.clearUserSessions(user.phoneNumber);
       const { menuText } = await WhatsAppService.getDynamicMenu(user);
       this.requestMenuSessions.set(user.phoneNumber, true);
       return menuText;
+    }
+
+    // Top-level 3: Quick Supervisor Assign command (e.g. "تعيين", "تعيين فني", "تعيين #MNT-2026-0007")
+    const isAssignCommand = parsed.messageType === 'text' && (
+      text === 'تعيين' ||
+      text === 'تعيين فني' ||
+      text === 'تعيين الفني' ||
+      text.startsWith('تعيين #') ||
+      text.startsWith('تعيين MNT-') ||
+      /^تعيين\s+/i.test(text)
+    );
+    if (isAssignCommand) {
+      this.clearUserSessions(user.phoneNumber);
+      return await this.handleQuickAssignCommand(parsed, user, text);
+    }
+
+    // Top-level 4: Quick Daily Digest
+    if (parsed.messageType === 'text' && (text === 'ملخص' || text === 'تقرير اليوم')) {
+      this.clearUserSessions(user.phoneNumber);
+      return await this.handleTextMessage(parsed, user);
     }
 
     // 2. Handle button replies (Interactions)
@@ -320,15 +379,15 @@ export class WhatsAppService {
       return `❌ تسجيل الحضور عبر إرسال الموقع الجغرافي مباشرة ملغى لتفادي التزييف. يرجى استخدام الرابط المخصص لتسجيل بصمة الحضور/الانصراف الخاص بك.`;
     }
 
-    // Maintenance Sessions routing
-    if (this.maintenanceSessions.has(user.phoneNumber)) {
-      return await this.handleMaintenanceSession(parsed, user);
+    // Routing Active Supervisor & Technician Sessions
+    if (this.supervisorAssignSessions.has(user.phoneNumber)) {
+      return await this.handleSupervisorAssignSession(parsed, user);
     }
     if (this.technicianMntSessions.has(user.phoneNumber)) {
       return await this.handleTechnicianMntSession(parsed, user);
     }
-    if (this.supervisorAssignSessions.has(user.phoneNumber)) {
-      return await this.handleSupervisorAssignSession(parsed, user);
+    if (this.maintenanceSessions.has(user.phoneNumber)) {
+      return await this.handleMaintenanceSession(parsed, user);
     }
     if (this.sparePartsSessions.has(user.phoneNumber)) {
       return await this.handleSparePartsSession(parsed, user);
@@ -426,6 +485,63 @@ export class WhatsAppService {
     return await this.handleTextMessage(parsed, user);
   }
 
+  private static async handleQuickAssignCommand(parsed: ParsedWhatsAppMessage, user: any, text: string): Promise<string> {
+    const allowedRoles = ['MaintenanceSupervisor', 'Admin', 'BranchManager', 'CEO'];
+    if (!allowedRoles.includes(user.role)) {
+      return `❌ عذراً، لا تمتلك صلاحية تعيين الفنيين بصفتك (${user.role}).`;
+    }
+
+    // Extract ticket number if provided (e.g. "تعيين #MNT-2026-0007" or "تعيين 0007" or "تعيين MNT-2026-0007")
+    const match = text.match(/تعيين\s*(?:فني|الفني)?\s*#?((?:MNT-2026-)?\d{4})?/i);
+    let targetTicket: any = null;
+
+    if (match && match[1]) {
+      let ticketNum = match[1].toUpperCase();
+      if (!ticketNum.startsWith('MNT-2026-')) {
+        ticketNum = `MNT-2026-${ticketNum}`;
+      }
+      targetTicket = await prisma.maintenanceRequest.findUnique({
+        where: { ticketNumber: ticketNum },
+        include: { branch: true }
+      });
+      if (!targetTicket) {
+        return `❌ لم يتم العثور على بلاغ صيانة برقم #${ticketNum}`;
+      }
+    } else {
+      // Find latest New maintenance ticket (for user's branch if supervisor has a branch, or globally for Admin/CEO)
+      targetTicket = await prisma.maintenanceRequest.findFirst({
+        where: {
+          status: 'New',
+          ...(user.role === 'Admin' || user.role === 'CEO' || !user.branchId ? {} : { branchId: user.branchId })
+        },
+        orderBy: { createdAt: 'desc' },
+        include: { branch: true }
+      });
+      if (!targetTicket) {
+        // If no 'New' ticket, check for any unassigned ticket
+        targetTicket = await prisma.maintenanceRequest.findFirst({
+          where: {
+            assignedTo: null,
+            status: { notIn: ['Closed'] },
+            ...(user.role === 'Admin' || user.role === 'CEO' || !user.branchId ? {} : { branchId: user.branchId })
+          },
+          orderBy: { createdAt: 'desc' },
+          include: { branch: true }
+        });
+      }
+    }
+
+    if (!targetTicket) {
+      return `✅ لا توجد بلاغات صيانة بانتظار تعيين فني حالياً.`;
+    }
+
+    return await this.handleButtonReply({
+      ...parsed,
+      messageType: 'button_reply',
+      buttonId: `assign_tech_btn_${targetTicket.id}`
+    }, user);
+  }
+
   private static async handleTextMessage(parsed: ParsedWhatsAppMessage, user: any): Promise<string> {
     const text = (parsed.text || '').trim();
     const textLower = text.toLowerCase();
@@ -457,6 +573,26 @@ export class WhatsAppService {
         }
         return await DigestService.generateDailyDigest(branches[branches.length - 1].id, dateStr);
       }
+    }
+
+    // Intercept Supervisor Quick Assign Command
+    if (text === 'تعيين' || text === 'تعيين فني' || text === 'تعيين الفني' || text.startsWith('تعيين #') || /^تعيين\s+/i.test(text)) {
+      return await this.handleQuickAssignCommand(parsed, user, text);
+    }
+
+    // Intercept Technician Start Command
+    const startMatch = text.match(/^(بدء العمل|بدء|ابدا|ابدأ)\s*#?(MNT-2026-\d{4})/i);
+    if (startMatch) {
+      const ticketNumber = startMatch[2].toUpperCase();
+      const request = await prisma.maintenanceRequest.findUnique({
+        where: { ticketNumber }
+      });
+      if (!request) {
+        return `❌ لم يتم العثور على بلاغ الصيانة بالرقم #${ticketNumber}`;
+      }
+      const { MaintenanceService } = require('./maintenance.service');
+      await MaintenanceService.startWork(request.id, user.id);
+      return `▶️ تم تسجيل بدء العمل الميداني على البلاغ #${ticketNumber} بنجاح.`;
     }
 
     // Intercept Technician Commands
@@ -753,13 +889,19 @@ export class WhatsAppService {
         if (req.approvalStatus === ApprovalStatus.Pending_CEO) {
           response += `\n⚠️ *تنبيه*: يتجاوز هذا الطلب الحد المسموح به للفرع ($5,000) وتم توجيهه تلقائياً إلى *الرئيس التنفيذي* للمراجعة والاعتماد.`;
           
-          // Send simulated notification to CEO
-          this.sendSimulatedApprovalMessage('+1234567891', 'الرئيس التنفيذي', req);
+          const ceo = await prisma.user.findFirst({ where: { role: Role.CEO } }) ||
+                      await prisma.user.findFirst({ where: { role: Role.Admin } });
+          if (ceo && ceo.phoneNumber) {
+            this.sendSimulatedApprovalMessage(ceo.phoneNumber, 'الرئيس التنفيذي', req);
+          }
         } else {
           response += `\n⏳ الطلب بانتظار مراجعة واعتماد *المدير المالي* للفندق.`;
           
-          // Send simulated notification to Finance Manager
-          this.sendSimulatedApprovalMessage('+1234567892', 'المدير المالي', req);
+          const finance = await prisma.user.findFirst({ where: { role: Role.FinanceManager } }) ||
+                          await prisma.user.findFirst({ where: { role: Role.Admin } });
+          if (finance && finance.phoneNumber) {
+            this.sendSimulatedApprovalMessage(finance.phoneNumber, 'المدير المالي', req);
+          }
         }
       }
 
@@ -905,8 +1047,8 @@ export class WhatsAppService {
       const loan = await LoanService.createLoanRequest(user.id, session.amount, session.reason);
       this.loanSessions.delete(user.phoneNumber);
 
-      // Notify Accountants
-      const accountants = await prisma.user.findMany({ where: { role: Role.Accountant } });
+      // Notify Accountants & Admins
+      const accountants = await prisma.user.findMany({ where: { role: { in: [Role.Accountant, Role.Admin] } } });
       const branchNameAr = user.branch.name === 'Sail Road Branch' ? 'فرع طريق السيل' :
                            user.branch.name === 'Beachside Resort Branch' ? 'فرع منتجع الشاطئ' :
                            user.branch.name;
@@ -920,11 +1062,9 @@ export class WhatsAppService {
                             `[ ❌ رفض ] (زر: reject_loan_req_${loan.id})`;
 
       for (const accountant of accountants) {
-        this.mockSendWhatsAppMessage(accountant.phoneNumber, accountantMsg);
-      }
-
-      if (accountants.length === 0) {
-        this.mockSendWhatsAppMessage('+1234567896', accountantMsg);
+        if (accountant.phoneNumber) {
+          this.mockSendWhatsAppMessage(accountant.phoneNumber, accountantMsg);
+        }
       }
 
       return `✅ تم إرسال طلب السلفة بمبلغ ${loan.amount} ريال بنجاح.`;
@@ -991,10 +1131,6 @@ export class WhatsAppService {
 
       for (const phone of notifiedPhones) {
         this.mockSendWhatsAppMessage(phone, notifyMsg);
-      }
-
-      if (notifiedPhones.size === 0) {
-        this.mockSendWhatsAppMessage('+1234567890', notifyMsg);
       }
 
       return `✅ تم إرسال طلب إجازتك بنجاح (${leave.daysCount} أيام).`;
@@ -1178,10 +1314,12 @@ export class WhatsAppService {
                            request.branch.name === 'Beachside Resort Branch' ? 'فرع منتجع الشاطئ' :
                            request.branch.name;
 
-      // Notify Procurement Officer
-      const officer = await prisma.user.findFirst({ where: { role: Role.WarehouseManager } });
-      const officerPhone = officer ? officer.phoneNumber : '+1234567895';
-      this.mockSendWhatsAppMessage(officerPhone, `🔔 تم اعتماد شراء (${request.description.replace('شراء خارجي: ', '')}) بتكلفة (${request.estimatedCost}) لفرع (${branchNameAr}). الرجاء البدء في عملية الشراء.`);
+      // Notify Procurement Officer or Admin
+      const officer = await prisma.user.findFirst({ where: { role: Role.WarehouseManager } }) ||
+                      await prisma.user.findFirst({ where: { role: Role.Admin } });
+      if (officer && officer.phoneNumber) {
+        this.mockSendWhatsAppMessage(officer.phoneNumber, `🔔 تم اعتماد شراء (${request.description.replace('شراء خارجي: ', '')}) بتكلفة (${request.estimatedCost}) لفرع (${branchNameAr}). الرجاء البدء في عملية الشراء.`);
+      }
 
       // Notify Technician
       if (request.reporter?.phoneNumber) {
@@ -1208,10 +1346,12 @@ export class WhatsAppService {
                            request.branch.name === 'Beachside Resort Branch' ? 'فرع منتجع الشاطئ' :
                            request.branch.name;
 
-      // Notify Procurement Officer
-      const officer = await prisma.user.findFirst({ where: { role: Role.WarehouseManager } });
-      const officerPhone = officer ? officer.phoneNumber : '+1234567895';
-      this.mockSendWhatsAppMessage(officerPhone, `❌ تم رفض شراء (${request.description.replace('شراء خارجي: ', '')}) لفرع (${branchNameAr}) من قبل الإدارة المالية.`);
+      // Notify Procurement Officer or Admin
+      const officer = await prisma.user.findFirst({ where: { role: Role.WarehouseManager } }) ||
+                      await prisma.user.findFirst({ where: { role: Role.Admin } });
+      if (officer && officer.phoneNumber) {
+        this.mockSendWhatsAppMessage(officer.phoneNumber, `❌ تم رفض شراء (${request.description.replace('شراء خارجي: ', '')}) لفرع (${branchNameAr}) من قبل الإدارة المالية.`);
+      }
 
       // Notify Technician
       if (request.reporter?.phoneNumber) {
@@ -1227,9 +1367,17 @@ export class WhatsAppService {
     const matchReqProcurement = buttonId.match(/^menu_req_procurement_(.+)$/);
 
     if (matchReqMaintenance || buttonId === 'menu_request_maintenance') {
-      const branchId = matchReqMaintenance ? matchReqMaintenance[1] : user.branchId;
-      this.userBranchSessions.set(user.phoneNumber, branchId);
-      return `🛠️ لتقديم طلب صيانة جديدة للفرع المختار، يرجى كتابة التفاصيل بالشكل التالي:\n\n*صيانة: [تفاصيل العطل وموقعه]*\n\nمثال:\n_صيانة: تسريب مياه في سقف الغرفة 402_`;
+      const branchId = matchReqMaintenance ? matchReqMaintenance[1] : (user.branchId || (await prisma.branch.findFirst())?.id || '');
+      this.clearUserSessions(user.phoneNumber);
+      this.maintenanceSessions.set(user.phoneNumber, { step: 1, branchId });
+      return `🛠️ اختر نوع العطل:\n` +
+             `1️⃣ كهرباء ⚡\n` +
+             `2️⃣ سباكة 🚿\n` +
+             `3️⃣ تكييف ❄️\n` +
+             `4️⃣ نجارة 🪚\n` +
+             `5️⃣ نظافة وتجهيز 🧹\n` +
+             `6️⃣ عام 🔧\n\n` +
+             `أرسل رقم الخيار:`;
     }
     if (matchReqWarehouse || buttonId === 'menu_request_warehouse') {
       const branchId = matchReqWarehouse ? matchReqWarehouse[1] : user.branchId;
@@ -1397,12 +1545,21 @@ export class WhatsAppService {
 
     const matchAssignTechBtn = buttonId.match(/^(assign_tech_btn_|reassign_tech_btn_)(.+)$/);
     if (matchAssignTechBtn) {
-      const requestId = matchAssignTechBtn[2];
+      this.clearUserSessions(user.phoneNumber);
+      const rawId = matchAssignTechBtn[2];
+      const req = await prisma.maintenanceRequest.findFirst({
+        where: {
+          OR: [{ id: rawId }, { ticketNumber: rawId }]
+        },
+        include: { branch: true }
+      });
+      const requestId = req ? req.id : rawId;
+
       const techs = await prisma.user.findMany({
-        where: { role: 'Technician', isAvailable: true }
+        where: { role: 'Technician' }
       });
       if (techs.length === 0) {
-        return `❌ لا يوجد فنيين متاحين حالياً.`;
+        return `❌ لا يوجد فنيين مسجلين في النظام حالياً.`;
       }
       
       const techListWithCounts = [];
@@ -1418,12 +1575,22 @@ export class WhatsAppService {
 
       this.supervisorAssignSessions.set(user.phoneNumber, { requestId, techs: techListWithCounts });
 
-      let msg = `👷 *اختر الفني المناسب لهذا البلاغ:*\n`;
+      let msg = `👷 *تعيين فني للبلاغ #${req?.ticketNumber || ''}:*\n\n`;
+      if (req) {
+        const branchNameAr = req.branch?.name === 'Sail Road Branch' ? 'فرع طريق السيل' :
+                             req.branch?.name === 'Beachside Resort Branch' ? 'فرع منتجع الشاطئ' :
+                             (req.branch?.name || '');
+        msg += `🏨 *الفرع*: ${branchNameAr}\n` +
+               `📍 *الموقع*: ${req.location}\n` +
+               `📝 *الوصف*: ${req.description}\n\n`;
+      }
+      msg += `اختر الفني المناسب من القائمة:\n\n`;
       techListWithCounts.forEach((tech, idx) => {
-        const emoji = idx === 0 ? '1️⃣' : idx === 1 ? '2️⃣' : `${idx + 1}.`;
-        msg += `${emoji} ${tech.name} - (${tech.openCount} بلاغات مفتوحة)\n`;
+        const emoji = idx === 0 ? '1️⃣' : idx === 1 ? '2️⃣' : idx === 2 ? '3️⃣' : idx === 3 ? '4️⃣' : `${idx + 1}.`;
+        const availText = tech.isAvailable ? '🟢 متاح' : '🟡 يعمل على بلاغ';
+        msg += `${emoji} *${tech.name}* (${availText} - ${tech.openCount} بلاغات مفتوحة)\n`;
       });
-      msg += `أرسل رقم الفني:`;
+      msg += `\nأرسل رقم الفني (مثال: 1) أو اكتب 'إلغاء':`;
       return msg;
     }
 
@@ -1640,9 +1807,10 @@ export class WhatsAppService {
         return `⚠️ يرجى إدخال اسم الصنف أو الوصف المطلوب شراؤه:`;
       }
 
-      // Find Procurement Officer (WarehouseManager)
-      const officer = await prisma.user.findFirst({ where: { role: Role.WarehouseManager } });
-      const officerPhone = officer ? officer.phoneNumber : '+1234567895';
+      // Find Procurement Officer (WarehouseManager) or Admin
+      const officer = await prisma.user.findFirst({ where: { role: Role.WarehouseManager } }) ||
+                      await prisma.user.findFirst({ where: { role: Role.Admin } });
+      const officerPhone = officer ? officer.phoneNumber : null;
 
       session.item = text;
       session.step = 2;
@@ -1650,12 +1818,13 @@ export class WhatsAppService {
       session.techName = user.name;
 
       this.procurementSessions.delete(user.phoneNumber);
-      this.procurementSessions.set(officerPhone, session);
-
-      this.mockSendWhatsAppMessage(
-        officerPhone,
-        `الفني ${user.name} يطلب شراء (${text}). الرجاء الرد بكتابة التكلفة التقديرية بالريال لتمريرها للاعتماد...`
-      );
+      if (officerPhone) {
+        this.procurementSessions.set(officerPhone, session);
+        this.mockSendWhatsAppMessage(
+          officerPhone,
+          `الفني ${user.name} يطلب شراء (${text}). الرجاء الرد بكتابة التكلفة التقديرية بالريال لتمريرها للاعتماد...`
+        );
+      }
 
       return `⏳ تم إرسال طلب الشراء الخارجي لمسؤول المشتريات لتحديد التكلفة التقديرية. سنقوم بإبلاغك بمجرد اعتماده.`;
     }
@@ -1679,9 +1848,10 @@ export class WhatsAppService {
         approvalStatus: ApprovalStatus.Pending_Finance,
       });
 
-      // Find Financial Manager
-      const financeManager = await prisma.user.findFirst({ where: { role: Role.FinanceManager } });
-      const financeManagerPhone = financeManager ? financeManager.phoneNumber : '+1234567892';
+      // Find Financial Manager or Admin
+      const financeManager = await prisma.user.findFirst({ where: { role: Role.FinanceManager } }) ||
+                             await prisma.user.findFirst({ where: { role: Role.Admin } });
+      const financeManagerPhone = financeManager ? financeManager.phoneNumber : null;
 
       // Find Branch Name
       const branch = await prisma.branch.findUnique({ where: { id: session.branchId } });
@@ -1691,12 +1861,14 @@ export class WhatsAppService {
            branch.name)
         : '';
 
-      this.mockSendWhatsAppMessage(
-        financeManagerPhone,
-        `طلب تعميد مالي: شراء (${session.item}) بتكلفة (${cost}) ريال لفرع (${branchNameAr}).\n\n` +
-        `[ ✅ تعميد مالي ] (زر: approve_proc_${request.id})\n` +
-        `[ ❌ رفض ] (زر: reject_proc_${request.id})`
-      );
+      if (financeManagerPhone) {
+        this.mockSendWhatsAppMessage(
+          financeManagerPhone,
+          `طلب تعميد مالي: شراء (${session.item}) بتكلفة (${cost}) ريال لفرع (${branchNameAr}).\n\n` +
+          `[ ✅ تعميد مالي ] (زر: approve_proc_${request.id})\n` +
+          `[ ❌ رفض ] (زر: reject_proc_${request.id})`
+        );
+      }
 
       return `⏳ تم تسجيل التكلفة (${cost} ريال) وتمرير الطلب للمدير المالي للاعتماد.`;
     }
@@ -1964,30 +2136,29 @@ export class WhatsAppService {
     // Clear session
     this.shiftReportSessions.delete(user.phoneNumber);
 
-    // Find Accountant
-    const accountant = await prisma.user.findFirst({
-      where: { role: Role.Accountant },
+    // Find Accountants & Admins
+    const reviewers = await prisma.user.findMany({
+      where: { role: { in: [Role.Accountant, Role.Admin] } },
     });
-    const accountantPhone = accountant ? accountant.phoneNumber : '+1234567896';
 
     const branchName = report.branch.name;
     const branchNameAr = branchName === 'Sail Road Branch' ? 'فرع طريق السيل' :
                          branchName === 'Beachside Resort Branch' ? 'فرع منتجع الشاطئ' :
                          branchName;
 
-    // Notify Accountant
-    this.mockSendWhatsAppMessage(
-      accountantPhone,
-      `📋 *تقفيلة جديدة بانتظار المراجعة*\n\n` +
-      `الموظف: ${user.name} | الفرع: ${branchNameAr} | الوردية: ${report.shiftLabel}\n` +
-      `صافي الكاش: ${report.cashNet} ريال\n` +
-      `إجمالي الشبكة: ${report.visa + report.mada + report.mastercard + report.gulfNet + report.tabby} ريال\n` +
-      `تحويل بنكي: ${report.bankTransfer} ريال\n` +
+    const shiftMsg = `📋 *تقفيلة جديدة بانتظار المراجعة والاعتماد*\n\n` +
+      `👤 *الموظف*: ${user.name} | *الفرع*: ${branchNameAr} | *الوردية*: ${report.shiftLabel}\n` +
+      `💵 *صافي الكاش*: ${report.cashNet} ريال\n` +
+      `💳 *إجمالي الشبكة*: ${report.visa + report.mada + report.mastercard + report.gulfNet + report.tabby} ريال\n` +
+      `🏦 *تحويل بنكي*: ${report.bankTransfer} ريال\n` +
       `━━━━━━━━━━━━━━━━━━━\n` +
-      `الإجمالي: ${report.grandTotal} ريال\n\n` +
-      `[ ✅ قبول ] (زر: approve_shift_${report.id})\n` +
-      `[ ❌ رفض ] (زر: reject_shift_${report.id})`
-    );
+      `📊 *الإجمالي*: ${report.grandTotal} ريال\n\n` +
+      `للموافقة والاعتماد:\napprove_shift_${report.id}\n\n` +
+      `للرفض:\nreject_shift_${report.id}`;
+
+    for (const rev of reviewers) {
+      this.mockSendWhatsAppMessage(rev.phoneNumber, shiftMsg);
+    }
 
     return `✅ تم إرسال تقفيلة الوردية للمحاسب بنجاح. رقم التقفيلة هو \`${report.id.slice(-6).toUpperCase()}\`.`;
   }
@@ -2242,9 +2413,23 @@ export class WhatsAppService {
         `🏦 تحويل بنكي:    ${session.bankTransfer} ريال\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
         `📊 *الإجمالي الكلي*: ${grandTotal} ريال\n\n` +
-        `هل تريد إرسال التقفيلة؟\n` +
-        `[ ✅ إرسال التقفيلة ] (زر: confirm_shift_submit)\n` +
-        `[ ❌ إلغاء ] (زر: cancel_shift_submit)`;
+        `هل تريد تأكيد إرسال التقفيلة؟\n` +
+        `1️⃣ ✅ إرسال التقفيلة\n` +
+        `2️⃣ ❌ إلغاء\n\n` +
+        `أرسل رقم الخيار (*1* أو *2*):`;
+    }
+
+    if (session.step === 10) {
+      const isConfirm = text === '1' || text === 'تأكيد' || text === 'تاكيد' || text === 'ارسال' || text === 'إرسال' || text === 'نعم' || text === 'موافق' || text === 'confirm_shift_submit' || text.includes('تأكيد') || text.includes('ارسال') || text.includes('إرسال');
+      const isCancel = text === '2' || text === 'الغاء' || text === 'إلغاء' || text === 'لا' || text === 'cancel_shift_submit' || text.includes('الغاء') || text.includes('إلغاء');
+
+      if (isConfirm) {
+        return await this.handleConfirmShiftSubmit(user);
+      } else if (isCancel) {
+        return await this.handleCancelShiftSubmit(user);
+      } else {
+        return `يرجى الرد برقم الخيار:\n1️⃣ ✅ إرسال التقفيلة\n2️⃣ ❌ إلغاء`;
+      }
     }
 
     return `⚠️ أمر غير معروف في جلسة التقفيلة.`;
@@ -2301,10 +2486,9 @@ export class WhatsAppService {
 
     const admins = await prisma.user.findMany({ where: { role: Role.Admin } });
     for (const admin of admins) {
-      this.mockSendWhatsAppMessage(admin.phoneNumber, adminMsg);
-    }
-    if (admins.length === 0) {
-      this.mockSendWhatsAppMessage('+1234567890', adminMsg);
+      if (admin.phoneNumber) {
+        this.mockSendWhatsAppMessage(admin.phoneNumber, adminMsg);
+      }
     }
 
     return `✅ تم إرسال طلبك الإداري للإدارة بنجاح.`;
@@ -2336,9 +2520,46 @@ export class WhatsAppService {
       return `📋 *ملخص طلب السلفة:*\n` +
              `💰 *المبلغ*: ${session.amount} ريال\n` +
              `📝 *السبب*: ${session.reason}\n\n` +
-             `هل تريد إرسال الطلب؟\n` +
-             `[ ✅ إرسال الطلب ] (زر: confirm_loan_submit)\n` +
-             `[ ❌ إلغاء ] (زر: cancel_loan_submit)`;
+             `هل تريد تأكيد إرسال الطلب؟\n` +
+             `1️⃣ ✅ إرسال الطلب\n` +
+             `2️⃣ ❌ إلغاء\n\n` +
+             `أرسل رقم الخيار (*1* أو *2*):`;
+    }
+
+    if (session.step === 3) {
+      const isConfirm = text === '1' || text === 'تأكيد' || text === 'تاكيد' || text === 'ارسال' || text === 'إرسال' || text === 'نعم' || text === 'موافق' || text === 'confirm_loan_submit' || text.includes('تأكيد') || text.includes('ارسال') || text.includes('إرسال');
+      const isCancel = text === '2' || text === 'الغاء' || text === 'إلغاء' || text === 'لا' || text === 'cancel_loan_submit' || text.includes('الغاء') || text.includes('إلغاء');
+
+      if (isConfirm) {
+        const { LoanService } = require('./loan.service');
+        const loan = await LoanService.createLoanRequest(user.id, session.amount!, session.reason!);
+        this.loanSessions.delete(user.phoneNumber);
+
+        // Notify Accountants & Admins
+        const accountants = await prisma.user.findMany({ where: { role: { in: [Role.Accountant, Role.Admin] } } });
+        const branchNameAr = user.branch?.name === 'Sail Road Branch' ? 'فرع طريق السيل' :
+                             user.branch?.name === 'Beachside Resort Branch' ? 'فرع منتجع الشاطئ' :
+                             user.branch?.name || '';
+
+        const accountantMsg = `💰 *طلب سلفة جديد*\n` +
+                              `👤 *الموظف*: ${user.name} | *الفرع*: ${branchNameAr}\n` +
+                              `💵 *المبلغ*: ${loan.amount} ريال\n` +
+                              `📝 *السبب*: ${loan.reason}\n` +
+                              `*الوقت*: ${new Date(loan.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}\n\n` +
+                              `[ ✅ موافقة ] (رمز: approve_loan_req_${loan.id})\n` +
+                              `[ ❌ رفض ] (رمز: reject_loan_req_${loan.id})`;
+
+        for (const accountant of accountants) {
+          this.mockSendWhatsAppMessage(accountant.phoneNumber, accountantMsg);
+        }
+
+        return `✅ تم إرسال طلب السلفة بمبلغ ${loan.amount} ريال بنجاح للإدارة المالية للمراجعة.`;
+      } else if (isCancel) {
+        this.loanSessions.delete(user.phoneNumber);
+        return `❌ تم إلغاء طلب السلفة.`;
+      } else {
+        return `يرجى الرد برقم الخيار:\n1️⃣ ✅ إرسال الطلب\n2️⃣ ❌ إلغاء`;
+      }
     }
 
     return `⚠️ حدث خطأ في جلسة طلب السلفة.`;
@@ -2480,9 +2701,42 @@ export class WhatsAppService {
              `📆 *من*: ${session.startDate} *إلى*: ${session.endDate}\n` +
              `🗓️ *عدد الأيام*: ${session.daysCount}\n` +
              `📝 *السبب*: ${session.reason}\n\n` +
-             `هل تريد إرسال الطلب؟\n` +
-             `[ ✅ إرسال الطلب ] (زر: confirm_leave_submit)\n` +
-             `[ ❌ إلغاء ] (زر: cancel_leave_submit)`;
+             `هل تريد تأكيد إرسال الطلب؟\n` +
+             `1️⃣ ✅ إرسال الطلب\n` +
+             `2️⃣ ❌ إلغاء\n\n` +
+             `أرسل رقم الخيار (*1* أو *2*):`;
+    }
+
+    if (session.step === 5) {
+      const isConfirm = text === '1' || text === 'تأكيد' || text === 'تاكيد' || text === 'ارسال' || text === 'إرسال' || text === 'نعم' || text === 'موافق' || text === 'confirm_leave_submit' || text.includes('تأكيد') || text.includes('ارسال') || text.includes('إرسال');
+      const isCancel = text === '2' || text === 'الغاء' || text === 'إلغاء' || text === 'لا' || text === 'cancel_leave_submit' || text.includes('الغاء') || text.includes('إلغاء');
+
+      if (isConfirm) {
+        if (!session.leaveType || !session.startDate || !session.endDate || !session.reason) {
+          this.leaveSessions.delete(user.phoneNumber);
+          return `❌ لا توجد بيانات مكتملة لطلب الإجازة. يرجى البدء من جديد.`;
+        }
+        const { LeaveService } = require('./leave.service');
+        const leave = await LeaveService.createLeaveRequest(
+          user.id,
+          session.leaveType,
+          session.startDate,
+          session.endDate,
+          session.reason
+        );
+        this.leaveSessions.delete(user.phoneNumber);
+
+        const typeAr = leave.leaveType === 'Annual' ? 'سنوية' :
+                       leave.leaveType === 'Sick' ? 'مرضية' :
+                       leave.leaveType === 'Emergency' ? 'طارئة' : 'بدون راتب';
+
+        return `✅ تم تقديم طلب الإجازة (${typeAr}) بنجاح لمدة ${leave.daysCount} يوم.\nبانتظار مراجعة الإدارة والموافقة عليها.`;
+      } else if (isCancel) {
+        this.leaveSessions.delete(user.phoneNumber);
+        return `❌ تم إلغاء طلب الإجازة.`;
+      } else {
+        return `يرجى الرد برقم الخيار:\n1️⃣ ✅ إرسال الطلب\n2️⃣ ❌ إلغاء`;
+      }
     }
 
     return `⚠️ حدث خطأ في جلسة طلب الإجازة.`;
@@ -2626,9 +2880,41 @@ export class WhatsAppService {
              `📝 *الوصف*: ${session.description}\n` +
              `⚡ *الأولوية*: ${priorityMapAr[session.priority || 'Normal']}\n` +
              `🏨 *الفرع*: ${branchNameAr}\n\n` +
-             `هل تريد إرسال البلاغ؟\n\n` +
-             `[ ✅ إرسال البلاغ ] (زر: confirm_maintenance_submit)\n` +
-             `[ ❌ إلغاء ] (زر: cancel_maintenance_submit)`;
+             `هل تريد إرسال وتأكيد البلاغ؟\n\n` +
+             `1️⃣ ✅ إرسال وتأكيد البلاغ\n` +
+             `2️⃣ ❌ إلغاء\n\n` +
+             `أرسل رقم الخيار (1 أو 2):`;
+    }
+
+    if (session.step === 6) {
+      const isConfirm = text === '1' || text === 'تأكيد' || text === 'تاكيد' || text === 'إرسال' || text === 'ارسال' || text === 'نعم' || text === 'موافق' || text === 'confirm_maintenance_submit' || text.includes('إرسال') || text.includes('ارسال') || text.includes('تأكيد');
+      const isCancel = text === '2' || text === 'إلغاء' || text === 'الغاء' || text === 'لا' || text === 'cancel_maintenance_submit';
+
+      if (isConfirm) {
+        const { MaintenanceService } = require('./maintenance.service');
+        const req = await MaintenanceService.createRequest({
+          reportedBy: user.id,
+          branchId: session.branchId,
+          category: session.category || 'General',
+          location: session.location || '',
+          description: session.description || '',
+          photoUrl: session.photoUrl,
+          priority: session.priority || 'Normal'
+        });
+
+        this.maintenanceSessions.delete(user.phoneNumber);
+
+        return `✅ *تم إرسال بلاغ الصيانة بنجاح!*\n\n` +
+               `🎫 *رقم البلاغ*: #${req.ticketNumber}\n` +
+               `📍 *الموقع*: ${req.location}\n` +
+               `⚡ *الأولوية*: ${req.priority}\n\n` +
+               `تم إشعار مشرف الصيانة للمتابعة وتعيين الفني المختص.`;
+      } else if (isCancel) {
+        this.maintenanceSessions.delete(user.phoneNumber);
+        return `❌ تم إلغاء بلاغ الصيانة. يمكنك البدء من جديد بإرسال "طلب" أو "menu".`;
+      } else {
+        return `يرجى الرد برقم الخيار:\n1️⃣ ✅ تأكيد وإرسال البلاغ\n2️⃣ ❌ إلغاء`;
+      }
     }
 
     return '';
@@ -2637,20 +2923,27 @@ export class WhatsAppService {
   private static async handleSupervisorAssignSession(parsed: ParsedWhatsAppMessage, user: any): Promise<string> {
     const session = this.supervisorAssignSessions.get(user.phoneNumber)!;
     const text = (parsed.text || '').trim();
+
+    if (text === 'إلغاء' || text === 'الغاء' || text.toLowerCase() === 'cancel') {
+      this.supervisorAssignSessions.delete(user.phoneNumber);
+      return `❌ تم إلغاء عملية تعيين الفني.`;
+    }
+
     const idx = parseInt(text, 10);
 
     if (isNaN(idx) || idx < 1 || idx > session.techs.length) {
-      return `⚠️ خيار غير صالح. يرجى إدخال رقم الفني من القائمة (1 إلى ${session.techs.length}):`;
+      return `⚠️ خيار غير صالح. يرجى إدخال رقم الفني من القائمة (1 إلى ${session.techs.length}) أو كتابة 'إلغاء':`;
     }
 
     const selectedTech = session.techs[idx - 1];
     
     const { MaintenanceService } = require('./maintenance.service');
-    await MaintenanceService.assignTechnician(session.requestId, selectedTech.id, user.id);
+    const updated = await MaintenanceService.assignTechnician(session.requestId, selectedTech.id, user.id);
 
     this.supervisorAssignSessions.delete(user.phoneNumber);
 
-    return `✅ تم تعيين الفني *${selectedTech.name}* للبلاغ بنجاح.`;
+    return `✅ تم تعيين الفني *${selectedTech.name}* للبلاغ #${updated.ticketNumber} بنجاح!\n` +
+           `تم إشعار الفني عبر الواتساب لمباشرة المهمة.`;
   }
 
   private static async handleTechnicianMntSession(parsed: ParsedWhatsAppMessage, user: any): Promise<string> {
@@ -2761,9 +3054,34 @@ export class WhatsAppService {
       return `📋 *مراجعة طلب الصرف من المستودع*\n\n` +
              `📦 *الصنف*: ${item.name}\n` +
              `🔢 *الكمية*: ${session.quantity} ${item.unit}\n` +
-             `📝 *الغرض*: ${session.purpose || 'غير محدد'}\n\n` +
-             `[ ✅ تأكيد الطلب ] (زر: confirm_whr_submit)\n` +
-             `[ ❌ إلغاء ] (زر: cancel_whr_submit)`;
+             `هل تريد تأكيد الطلب؟\n\n` +
+             `1️⃣ ✅ تأكيد وإرسال الطلب\n` +
+             `2️⃣ ❌ إلغاء\n\n` +
+             `أرسل رقم الخيار (1 أو 2):`;
+    }
+
+    if (session.step === 4) {
+      const isConfirm = text === '1' || text === 'تأكيد' || text === 'تاكيد' || text === 'إرسال' || text === 'ارسال' || text === 'نعم' || text === 'confirm_whr_submit' || text.includes('تأكيد');
+      const isCancel = text === '2' || text === 'إلغاء' || text === 'الغاء' || text === 'cancel_whr_submit';
+
+      if (isConfirm) {
+        const { WarehouseService } = require('./warehouse.service');
+        const req = await WarehouseService.createWarehouseRequest({
+          itemId: session.itemId!,
+          branchId: user.branchId || 'cmv1309b20000y5dimezw4ukr',
+          requestedBy: user.id,
+          quantityRequested: session.quantity!,
+          purpose: session.purpose
+        });
+
+        this.warehouseSessions.delete(user.phoneNumber);
+        return `✅ تم تقديم طلب صرف المستودع بنجاح!\n🎫 رقم الطلب: #${req.ticketNumber}\nبانتظار مراجعة واعتماد أمين المستودع.`;
+      } else if (isCancel) {
+        this.warehouseSessions.delete(user.phoneNumber);
+        return `❌ تم إلغاء طلب صرف المستودع.`;
+      } else {
+        return `يرجى الرد برقم الخيار:\n1️⃣ ✅ تأكيد الطلب\n2️⃣ ❌ إلغاء`;
+      }
     }
 
     return '❌ حالة غير معروفة في الجلسة.';
@@ -2951,35 +3269,43 @@ export class WhatsAppService {
   }
 
   private static clearUserSessions(phoneNumber: string): void {
-    this.technicianSessions.delete(phoneNumber);
-    this.ratingSessions.delete(phoneNumber);
-    this.userBranchSessions.delete(phoneNumber);
-    this.rejectionSessions.delete(phoneNumber);
-    this.procurementSessions.delete(phoneNumber);
-    this.shiftReportSessions.delete(phoneNumber);
-    this.shiftRejectionSessions.delete(phoneNumber);
-    this.attendanceSessions.delete(phoneNumber);
-    this.loanSessions.delete(phoneNumber);
-    this.leaveSessions.delete(phoneNumber);
-    this.loanRejectionSessions.delete(phoneNumber);
-    this.leaveRejectionSessions.delete(phoneNumber);
-    this.requestMenuSessions.delete(phoneNumber);
-    this.adminRequestSessions.delete(phoneNumber);
-    this.maintenanceSessions.delete(phoneNumber);
-    this.supervisorAssignSessions.delete(phoneNumber);
-    this.technicianMntSessions.delete(phoneNumber);
-    this.sparePartsSessions.delete(phoneNumber);
-    this.maintenanceApprovalSessions.delete(phoneNumber);
-    this.warehouseSessions.delete(phoneNumber);
-    this.warehouseApprovalSessions.delete(phoneNumber);
-    this.procurementReviewSessions.delete(phoneNumber);
-    this.procurementApprovalSessions.delete(phoneNumber);
-    this.lfSessions.delete(phoneNumber);
-    this.dmgSessions.delete(phoneNumber);
-    this.dmgReviewSessions.delete(phoneNumber);
-    this.dmgPaymentSessions.delete(phoneNumber);
-    this.dmgRefusalSessions.delete(phoneNumber);
-    this.dmgWaiverSessions.delete(phoneNumber);
+    const keys = [phoneNumber];
+    if (phoneNumber.startsWith('+')) {
+      keys.push(phoneNumber.substring(1));
+    } else {
+      keys.push('+' + phoneNumber);
+    }
+    for (const key of keys) {
+      this.technicianSessions.delete(key);
+      this.ratingSessions.delete(key);
+      this.userBranchSessions.delete(key);
+      this.rejectionSessions.delete(key);
+      this.procurementSessions.delete(key);
+      this.shiftReportSessions.delete(key);
+      this.shiftRejectionSessions.delete(key);
+      this.attendanceSessions.delete(key);
+      this.loanSessions.delete(key);
+      this.leaveSessions.delete(key);
+      this.loanRejectionSessions.delete(key);
+      this.leaveRejectionSessions.delete(key);
+      this.requestMenuSessions.delete(key);
+      this.adminRequestSessions.delete(key);
+      this.maintenanceSessions.delete(key);
+      this.supervisorAssignSessions.delete(key);
+      this.technicianMntSessions.delete(key);
+      this.sparePartsSessions.delete(key);
+      this.maintenanceApprovalSessions.delete(key);
+      this.warehouseSessions.delete(key);
+      this.warehouseApprovalSessions.delete(key);
+      this.procurementReviewSessions.delete(key);
+      this.procurementApprovalSessions.delete(key);
+      this.lfSessions.delete(key);
+      this.dmgSessions.delete(key);
+      this.dmgReviewSessions.delete(key);
+      this.dmgPaymentSessions.delete(key);
+      this.dmgRefusalSessions.delete(key);
+      this.dmgWaiverSessions.delete(key);
+    }
   }
 
   public static mockSendWhatsAppMessage(to: string, text: string): void {
@@ -3050,15 +3376,46 @@ export class WhatsAppService {
                            user.branch?.name === 'Beachside Resort Branch' ? 'فرع منتجع الشاطئ' :
                            user.branch?.name || '';
 
-      const summary = `📋 *ملخص*:\n` +
+      const summary = `📋 *ملخص بلاغ المفقودات*:\n` +
         `📍 *الموقع*: ${session.location}\n` +
         `📝 *الوصف*: ${session.description}\n` +
         `👤 *العميل*: ${session.guestName}\n` +
         `🏨 *الفرع*: ${branchNameAr}\n\n` +
-        `[ ✅ تسجيل ] (زر: confirm_lf_btn)\n` +
-        `[ ❌ إلغاء ] (زر: cancel_lf_btn)`;
+        `هل تريد تأكيد وحفظ البلاغ؟\n` +
+        `1️⃣ ✅ تأكيد وحفظ البلاغ\n` +
+        `2️⃣ ❌ إلغاء\n\n` +
+        `أرسل رقم الخيار (*1* أو *2*):`;
 
       return summary;
+    }
+
+    if (session.step === 6) {
+      const isConfirm = text === '1' || text === 'تأكيد' || text === 'تاكيد' || text === 'تسجيل' || text === 'ارسال' || text === 'إرسال' || text === 'نعم' || text === 'موافق' || text === 'confirm_lf_btn' || text.includes('تأكيد') || text.includes('تاكيد') || text.includes('تسجيل');
+      const isCancel = text === '2' || text === 'الغاء' || text === 'إلغاء' || text === 'لا' || text === 'cancel_lf_btn' || text.includes('الغاء') || text.includes('إلغاء');
+
+      if (isConfirm) {
+        if (!session.location || !session.description) {
+          this.lfSessions.delete(user.phoneNumber);
+          return `❌ لا توجد بيانات مكتملة للبلاغ. يرجى البدء من جديد.`;
+        }
+        const { LostFoundService } = require('./lostfound.service');
+        const item = await LostFoundService.createLostItem({
+          reportedBy: user.id,
+          branchId: user.branchId || 'cmv1309b20000y5dimezw4ukr',
+          location: session.location,
+          description: session.description,
+          photoUrl: session.photoUrl,
+          guestName: session.guestName === 'غير معروف' ? null : session.guestName,
+          guestPhone: session.guestPhone
+        });
+        this.lfSessions.delete(user.phoneNumber);
+        return `✅ تم تسجيل الغرض المفقود بنجاح!\n🎫 رقم البلاغ: #${item.ticketNumber}\nتم نقله للمستودع وإشعار موظفي الاستقبال.`;
+      } else if (isCancel) {
+        this.lfSessions.delete(user.phoneNumber);
+        return `❌ تم إلغاء تسجيل المفقودات.`;
+      } else {
+        return `يرجى الرد برقم الخيار:\n1️⃣ ✅ تأكيد وحفظ البلاغ\n2️⃣ ❌ إلغاء`;
+      }
     }
 
     return '';
@@ -3164,10 +3521,44 @@ export class WhatsAppService {
         `📝 *الوصف*: ${session.description}\n` +
         `👤 *العميل*: ${session.guestName}\n` +
         `🏨 *الفرع*: ${branchNameAr}\n\n` +
-        `[ ✅ تسجيل ] (زر: confirm_dmg_btn)\n` +
-        `[ ❌ إلغاء ] (زر: cancel_dmg_btn)`;
+        `هل تريد تأكيد إرسال البلاغ؟\n` +
+        `1️⃣ ✅ تأكيد وإرسال البلاغ\n` +
+        `2️⃣ ❌ إلغاء\n\n` +
+        `أرسل رقم الخيار (*1* أو *2*):`;
 
       return summary;
+    }
+
+    if (session.step === 8) {
+      const isConfirm = text === '1' || text === 'تأكيد' || text === 'تاكيد' || text === 'تسجيل' || text === 'ارسال' || text === 'إرسال' || text === 'نعم' || text === 'موافق' || text === 'confirm_dmg_btn' || text.includes('تأكيد') || text.includes('تاكيد') || text.includes('ارسال') || text.includes('إرسال');
+      const isCancel = text === '2' || text === 'الغاء' || text === 'إلغاء' || text === 'لا' || text === 'cancel_dmg_btn' || text.includes('الغاء') || text.includes('إلغاء');
+
+      if (isConfirm) {
+        if (!session.roomNumber || !session.damageType || !session.description) {
+          this.dmgSessions.delete(user.phoneNumber);
+          return `❌ لا توجد بيانات مكتملة لبلاغ التلف. يرجى البدء من جديد.`;
+        }
+        const { LostFoundService } = require('./lostfound.service');
+        const report = await LostFoundService.createDamageReport({
+          reportedBy: user.id,
+          branchId: user.branchId || 'cmv1309b20000y5dimezw4ukr',
+          roomNumber: session.roomNumber,
+          damageType: session.damageType,
+          description: session.description,
+          photoUrls: JSON.stringify(session.photoUrls || []),
+          reportedDuring: session.reportedDuring,
+          reservationRef: session.reservationRef,
+          guestName: session.guestName === 'غير معروف' ? null : session.guestName,
+          guestPhone: session.guestPhone
+        });
+        this.dmgSessions.delete(user.phoneNumber);
+        return `✅ تم تسجيل بلاغ التلفيات بنجاح!\n🎫 رقم البلاغ: #${report.ticketNumber}\nتم إحالة التذكرة للمشرف والمدير للمراجعة والتقييم.`;
+      } else if (isCancel) {
+        this.dmgSessions.delete(user.phoneNumber);
+        return `❌ تم إلغاء تسجيل بلاغ التلفيات.`;
+      } else {
+        return `يرجى الرد برقم الخيار:\n1️⃣ ✅ تأكيد وإرسال البلاغ\n2️⃣ ❌ إلغاء`;
+      }
     }
 
     return '';

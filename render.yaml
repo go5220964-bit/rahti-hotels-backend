@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: rahti-hotels-backend
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        value: rahti-jwt-secret-2026
+      - key: MESSAGING_PLATFORM
+        value: whatsapp
+      - key: WHATSAPP_PROVIDER
+        value: ultramsg
+      - key: ULTRAMSG_INSTANCE_ID
+        value: instance193771
+      - key: ULTRAMSG_TOKEN
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        value: super-secret-verify-token-123
+      - key: WEBHOOK_VERIFY_TOKEN
+        value: super-secret-verify-token-123
+      - key: GEMINI_API_KEY
+        sync: false
