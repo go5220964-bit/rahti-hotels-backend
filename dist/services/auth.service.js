@@ -18,8 +18,23 @@ class AuthService {
         if (!phoneNumber || !password) {
             throw new error_middleware_1.AppError(400, 'MISSING_CREDENTIALS', 'يرجى تقديم رقم الهاتف وكلمة المرور.');
         }
-        const user = await prisma_1.default.user.findUnique({
-            where: { phoneNumber },
+        let cleanPhone = phoneNumber.trim();
+        if (cleanPhone.startsWith('05')) {
+            cleanPhone = '+966' + cleanPhone.slice(1);
+        }
+        else if (cleanPhone.startsWith('5') && cleanPhone.length === 9) {
+            cleanPhone = '+966' + cleanPhone;
+        }
+        else if (cleanPhone.startsWith('966')) {
+            cleanPhone = '+' + cleanPhone;
+        }
+        const user = await prisma_1.default.user.findFirst({
+            where: {
+                OR: [
+                    { phoneNumber: cleanPhone },
+                    { phoneNumber: phoneNumber.trim() }
+                ]
+            },
             include: { branch: true },
         });
         if (!user) {
