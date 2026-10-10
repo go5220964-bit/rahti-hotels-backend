@@ -10,6 +10,7 @@ export enum Role {
   MaintenanceSupervisor = 'MaintenanceSupervisor',
   ProcurementOfficer = 'ProcurementOfficer',
   HousekeepingStaff = 'HousekeepingStaff',
+  HousekeepingSupervisor = 'HousekeepingSupervisor',
 }
 
 export enum RequestType {

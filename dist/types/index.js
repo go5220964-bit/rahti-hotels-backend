@@ -14,6 +14,7 @@ var Role;
     Role["MaintenanceSupervisor"] = "MaintenanceSupervisor";
     Role["ProcurementOfficer"] = "ProcurementOfficer";
     Role["HousekeepingStaff"] = "HousekeepingStaff";
+    Role["HousekeepingSupervisor"] = "HousekeepingSupervisor";
 })(Role || (exports.Role = Role = {}));
 var RequestType;
 (function (RequestType) {

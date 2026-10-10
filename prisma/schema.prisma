@@ -557,6 +557,7 @@ enum Role {
   MaintenanceSupervisor
   ProcurementOfficer
   HousekeepingStaff
+  HousekeepingSupervisor
 }
 
 enum EmployeeType {

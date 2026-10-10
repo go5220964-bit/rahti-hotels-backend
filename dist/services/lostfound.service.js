@@ -197,7 +197,7 @@ class LostFoundService {
         const managersAndSupervisors = await prisma_1.default.user.findMany({
             where: {
                 branchId: report.branchId,
-                role: { in: ['BranchManager', 'BranchSupervisor'] }
+                role: { in: ['BranchManager', 'BranchSupervisor', 'HousekeepingSupervisor', 'Admin'] }
             }
         });
         const typeAr = this.translateDamageType(report.damageType);

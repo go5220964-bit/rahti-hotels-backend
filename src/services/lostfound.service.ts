@@ -240,7 +240,7 @@ export class LostFoundService {
     const managersAndSupervisors = await prisma.user.findMany({
       where: {
         branchId: report.branchId,
-        role: { in: ['BranchManager', 'BranchSupervisor'] as any }
+        role: { in: ['BranchManager', 'BranchSupervisor', 'HousekeepingSupervisor', 'Admin'] as any }
       }
     });
 
