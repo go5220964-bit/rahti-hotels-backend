@@ -184,6 +184,9 @@ class WhatsAppService {
         // Ignore messages sent by the bot itself
         if (data.fromMe === true || data.fromMe === 'true')
             return messages;
+        // Ignore group chats and broadcast messages
+        if (data.from && (data.from.includes('@g.us') || data.from.includes('status@broadcast')))
+            return messages;
         let senderNumber = data.from || '';
         if (senderNumber.includes('@')) {
             senderNumber = senderNumber.split('@')[0];
@@ -225,11 +228,12 @@ class WhatsAppService {
             parsed.buttonId = textBody;
             parsed.buttonTitle = textBody;
         }
-        else if (data.type === 'image' || data.media) {
+        else if (data.type === 'image' || data.media || data.type === 'document' || data.type === 'video' || data.type === 'audio' || data.type === 'ptt') {
             parsed.messageType = 'media';
-            parsed.mediaId = data.media || data.id;
-            parsed.mimeType = 'image/jpeg';
+            parsed.mediaId = data.media || data.body || data.id;
+            parsed.mimeType = data.type === 'document' ? 'application/pdf' : 'image/jpeg';
             parsed.caption = textBody;
+            parsed.text = textBody;
         }
         else if (data.lat && data.lng) {
             parsed.messageType = 'location';
@@ -563,8 +567,9 @@ class WhatsAppService {
                 return `⚠️ خيار غير صحيح. يرجى إرسال كلمة "طلب" لعرض قائمة الخيارات الحالية واختيار رقم صحيح.`;
             }
             const actualSelection = enabledOptions[index].id;
+            const defaultBranchId = user.branchId || (await prisma_1.default.branch.findFirst())?.id || '';
             if (actualSelection === '1') {
-                this.maintenanceSessions.set(user.phoneNumber, { step: 1, branchId: user.branchId });
+                this.maintenanceSessions.set(user.phoneNumber, { step: 1, branchId: defaultBranchId });
                 return `🛠️ اختر نوع العطل:\n` +
                     `1️⃣ كهرباء ⚡\n` +
                     `2️⃣ سباكة 🚿\n` +
@@ -575,7 +580,7 @@ class WhatsAppService {
                     `أرسل رقم الخيار:`;
             }
             else if (actualSelection === '2') {
-                this.maintenanceSessions.set(user.phoneNumber, { step: 2, branchId: user.branchId, category: 'Cleaning' });
+                this.maintenanceSessions.set(user.phoneNumber, { step: 2, branchId: defaultBranchId, category: 'Cleaning' });
                 return `📍 أدخل موقع العطل (رقم الغرفة أو وصف المكان):`;
             }
             else if (actualSelection === '3') {
@@ -597,7 +602,7 @@ class WhatsAppService {
                 return msg;
             }
             else if (actualSelection === '4') {
-                this.procurementSessions.set(user.phoneNumber, { step: 1, branchId: user.branchId });
+                this.procurementSessions.set(user.phoneNumber, { step: 1, branchId: defaultBranchId });
                 return `🛒 يرجى إدخال اسم الصنف أو الوصف المطلوب شراؤه:`;
             }
             else if (actualSelection === '5') {
@@ -2391,6 +2396,10 @@ class WhatsAppService {
     static async handleMaintenanceSession(parsed, user) {
         const session = this.maintenanceSessions.get(user.phoneNumber);
         const text = (parsed.text || '').trim();
+        if (text === 'إلغاء' || text === 'الغاء' || text.toLowerCase() === 'cancel') {
+            this.maintenanceSessions.delete(user.phoneNumber);
+            return `❌ تم إلغاء بلاغ الصيانة. يمكنك البدء من جديد بإرسال "طلب" أو "menu".`;
+        }
         if (session.step === 1) {
             if (!['1', '2', '3', '4', '5', '6'].includes(text)) {
                 return `🛠️ اختر نوع العطل:\n` +
@@ -2455,19 +2464,25 @@ class WhatsAppService {
             return `📸 هل تريد إرفاق صورة؟ أرسلها الآن أو اكتب 'تخطي':`;
         }
         if (session.step === 5) {
-            if (parsed.messageType === 'media') {
-                session.photoUrl = parsed.mediaId || 'https://images.unsplash.com/photo-1581092160607-ee22621dd758';
+            const isMedia = parsed.messageType === 'media' || !!parsed.mediaId || (text && (text.startsWith('http://') || text.startsWith('https://')));
+            const isSkip = text === 'تخطي' || text === 'تخطى' || text === 'لا' || text === 'بدون' || text.toLowerCase() === 'skip';
+            if (isMedia) {
+                session.photoUrl = parsed.mediaId || text || 'https://images.unsplash.com/photo-1581092160607-ee22621dd758';
             }
-            else if (text !== 'تخطي') {
+            else if (!isSkip) {
                 return `📸 هل تريد إرفاق صورة؟ أرسلها الآن أو اكتب 'تخطي':`;
             }
             session.step = 6;
-            const branch = await prisma_1.default.branch.findUnique({ where: { id: session.branchId } });
+            if (!session.branchId) {
+                const defaultBranch = await prisma_1.default.branch.findFirst();
+                session.branchId = defaultBranch?.id || '';
+            }
+            const branch = session.branchId ? await prisma_1.default.branch.findUnique({ where: { id: session.branchId } }) : null;
             const branchNameAr = branch
                 ? (branch.name === 'Sail Road Branch' ? 'فرع طريق السيل' :
                     branch.name === 'Beachside Resort Branch' ? 'فرع منتجع الشاطئ' :
                         branch.name)
-                : '';
+                : 'الفرع الرئيسي';
             const categoryMapAr = {
                 'Electrical': 'كهرباء ⚡',
                 'Plumbing': 'سباكة 🚿',
@@ -2483,36 +2498,48 @@ class WhatsAppService {
                 'Low': 'منخفضة 🟢'
             };
             return `📋 *ملخص بلاغ الصيانة:*\n\n` +
-                `🔧 *النوع*: ${categoryMapAr[session.category || 'General']}\n` +
-                `📍 *الموقع*: ${session.location}\n` +
-                `📝 *الوصف*: ${session.description}\n` +
-                `⚡ *الأولوية*: ${priorityMapAr[session.priority || 'Normal']}\n` +
-                `🏨 *الفرع*: ${branchNameAr}\n\n` +
+                `🔧 *النوع*: ${categoryMapAr[session.category || 'General'] || session.category || 'عام'}\n` +
+                `📍 *الموقع*: ${session.location || 'غير محدد'}\n` +
+                `📝 *الوصف*: ${session.description || 'لا يوجد'}\n` +
+                `⚡ *الأولوية*: ${priorityMapAr[session.priority || 'Normal'] || 'عادية'}\n` +
+                `🏨 *الفرع*: ${branchNameAr}\n` +
+                (session.photoUrl ? `📸 *الصورة*: تم إرفاق صورة بنجاح ✅\n\n` : `📸 *الصورة*: بدون صورة\n\n`) +
                 `هل تريد إرسال وتأكيد البلاغ؟\n\n` +
                 `1️⃣ ✅ إرسال وتأكيد البلاغ\n` +
                 `2️⃣ ❌ إلغاء\n\n` +
                 `أرسل رقم الخيار (1 أو 2):`;
         }
         if (session.step === 6) {
-            const isConfirm = text === '1' || text === 'تأكيد' || text === 'تاكيد' || text === 'إرسال' || text === 'ارسال' || text === 'نعم' || text === 'موافق' || text === 'confirm_maintenance_submit' || text.includes('إرسال') || text.includes('ارسال') || text.includes('تأكيد');
-            const isCancel = text === '2' || text === 'إلغاء' || text === 'الغاء' || text === 'لا' || text === 'cancel_maintenance_submit';
+            const isConfirm = text === '1' || text === 'تأكيد' || text === 'تاكيد' || text === 'إرسال' || text === 'ارسال' || text === 'نعم' || text === 'موافق' || text === 'confirm_maintenance_submit' || text.includes('إرسال') || text.includes('ارسال') || text.includes('تأكيد') || text.includes('تاكيد');
+            const isCancel = text === '2' || text === 'إلغاء' || text === 'الغاء' || text === 'لا' || text === 'cancel_maintenance_submit' || text.includes('إلغاء') || text.includes('الغاء');
             if (isConfirm) {
-                const { MaintenanceService } = require('./maintenance.service');
-                const req = await MaintenanceService.createRequest({
-                    reportedBy: user.id,
-                    branchId: session.branchId,
-                    category: session.category || 'General',
-                    location: session.location || '',
-                    description: session.description || '',
-                    photoUrl: session.photoUrl,
-                    priority: session.priority || 'Normal'
-                });
-                this.maintenanceSessions.delete(user.phoneNumber);
-                return `✅ *تم إرسال بلاغ الصيانة بنجاح!*\n\n` +
-                    `🎫 *رقم البلاغ*: #${req.ticketNumber}\n` +
-                    `📍 *الموقع*: ${req.location}\n` +
-                    `⚡ *الأولوية*: ${req.priority}\n\n` +
-                    `تم إشعار مشرف الصيانة للمتابعة وتعيين الفني المختص.`;
+                try {
+                    if (!session.branchId) {
+                        const defaultBranch = await prisma_1.default.branch.findFirst();
+                        session.branchId = defaultBranch?.id || '';
+                    }
+                    const { MaintenanceService } = require('./maintenance.service');
+                    const req = await MaintenanceService.createRequest({
+                        reportedBy: user.id,
+                        branchId: session.branchId,
+                        category: session.category || 'General',
+                        location: session.location || '',
+                        description: session.description || '',
+                        photoUrl: session.photoUrl,
+                        priority: session.priority || 'Normal'
+                    });
+                    this.maintenanceSessions.delete(user.phoneNumber);
+                    return `✅ *تم إرسال بلاغ الصيانة بنجاح!*\n\n` +
+                        `🎫 *رقم البلاغ*: #${req.ticketNumber}\n` +
+                        `📍 *الموقع*: ${req.location}\n` +
+                        `⚡ *الأولوية*: ${req.priority}\n\n` +
+                        `تم إشعار مشرف الصيانة للمتابعة وتعيين الفني المختص.`;
+                }
+                catch (err) {
+                    console.error('🔴 Error creating maintenance request in step 6:', err);
+                    this.maintenanceSessions.delete(user.phoneNumber);
+                    return `❌ حدث خطأ أثناء حفظ بلاغ الصيانة (${err?.message || 'Error'}). يرجى إعادة المحاولة بإرسال "طلب".`;
+                }
             }
             else if (isCancel) {
                 this.maintenanceSessions.delete(user.phoneNumber);
@@ -3320,6 +3347,9 @@ class WhatsAppService {
         return { menuText, enabledOptions };
     }
     static async sendWhatsAppMessage(to, text) {
+        if (!to || !to.trim() || !text || !text.trim()) {
+            return;
+        }
         console.log(`[WhatsApp Bot] Sending message to ${to}:\n${text}`);
         try {
             try {

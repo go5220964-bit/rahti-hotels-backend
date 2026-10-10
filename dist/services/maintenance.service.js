@@ -31,11 +31,16 @@ class MaintenanceService {
      */
     static async createRequest(data, notifySupervisor = true) {
         const ticketNumber = await this.generateTicketNumber();
+        let targetBranchId = data.branchId;
+        if (!targetBranchId) {
+            const defaultBranch = await prisma_1.default.branch.findFirst();
+            targetBranchId = defaultBranch?.id || '';
+        }
         const request = (await prisma_1.default.maintenanceRequest.create({
             data: {
                 ticketNumber,
                 reportedBy: data.reportedBy,
-                branchId: data.branchId,
+                branchId: targetBranchId,
                 category: data.category,
                 location: data.location,
                 description: data.description,
@@ -63,49 +68,60 @@ class MaintenanceService {
                 role: { in: ['MaintenanceSupervisor', 'Admin'] }
             }
         });
-        const branchNameAr = request.branch.name === 'Sail Road Branch' ? 'فرع طريق السيل' :
-            request.branch.name === 'Beachside Resort Branch' ? 'فرع منتجع الشاطئ' :
-                request.branch.name;
+        const branchNameAr = request.branch?.name === 'Sail Road Branch' ? 'فرع طريق السيل' :
+            request.branch?.name === 'Beachside Resort Branch' ? 'فرع منتجع الشاطئ' :
+                (request.branch?.name || 'الفرع الرئيسي');
         const notifyMsg = `🔔 *بلاغ صيانة جديد #${request.ticketNumber}*\n\n` +
             `🏨 *الفرع*: ${branchNameAr}\n` +
             `🔧 *النوع*: ${this.translateCategory(request.category)}\n` +
             `📍 *الموقع*: ${request.location}\n` +
             `📝 *الوصف*: ${request.description}\n` +
             `⚡ *الأولوية*: ${this.translatePriority(request.priority)}\n` +
-            `👤 *المُبلِّغ*: ${request.reporter.name}\n` +
+            `👤 *المُبلِّغ*: ${request.reporter?.name || 'موظف'}\n` +
             `🕐 *الوقت*: ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}\n\n` +
             `👷 *لتعيين فني، أرسل كلمة "تعيين" أو الكود أدناه:*\n` +
             `assign_tech_btn_${request.id}`;
         if (notifySupervisor) {
             for (const sup of supervisors) {
-                // If MaintenanceSupervisor has branchId set, only notify for that branch (Admins receive all)
-                if (sup.role !== 'Admin' && sup.branchId && sup.branchId !== request.branchId) {
-                    continue;
-                }
-                if (process.env.MESSAGING_PLATFORM === 'telegram') {
-                    const { TelegramService } = require('./telegram.service');
-                    const chatId = sup.telegramChatId || TelegramService.getChatIdByPhone(sup.phoneNumber);
-                    if (chatId) {
-                        const categoryAr = this.translateCategory(request.category);
-                        const priorityAr = this.translatePriority(request.priority);
-                        const text = `🔔 <b>بلاغ صيانة جديد #${request.ticketNumber}</b>\n\n` +
-                            `🏨 <b>الفرع</b>: ${branchNameAr}\n` +
-                            `🔧 <b>النوع</b>: ${categoryAr}\n` +
-                            `📍 <b>الموقع</b>: ${request.location}\n` +
-                            `📝 <b>الوصف</b>: ${request.description}\n` +
-                            `⚡ <b>الأولوية</b>: ${priorityAr}\n` +
-                            `👤 <b>المُبلِّغ</b>: ${request.reporter.name}\n` +
-                            `🕐 <b>الوقت</b>: ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}`;
-                        const replyMarkup = {
-                            inline_keyboard: [
-                                [{ text: "👨‍🔧 تعيين فني", callback_data: `assign_tech_${request.id}` }]
-                            ]
-                        };
-                        await TelegramService.sendMessage(chatId, text, replyMarkup);
+                try {
+                    // If MaintenanceSupervisor has branchId set, only notify for that branch (Admins receive all)
+                    if (sup.role !== 'Admin' && sup.branchId && sup.branchId !== request.branchId) {
                         continue;
                     }
+                    // Skip notifying the reporter themselves if they are an admin or supervisor (they receive the response directly)
+                    if (sup.id === request.reportedBy) {
+                        continue;
+                    }
+                    if (process.env.MESSAGING_PLATFORM === 'telegram') {
+                        const { TelegramService } = require('./telegram.service');
+                        const chatId = sup.telegramChatId || TelegramService.getChatIdByPhone(sup.phoneNumber);
+                        if (chatId) {
+                            const categoryAr = this.translateCategory(request.category);
+                            const priorityAr = this.translatePriority(request.priority);
+                            const text = `🔔 <b>بلاغ صيانة جديد #${request.ticketNumber}</b>\n\n` +
+                                `🏨 <b>الفرع</b>: ${branchNameAr}\n` +
+                                `🔧 <b>النوع</b>: ${categoryAr}\n` +
+                                `📍 <b>الموقع</b>: ${request.location}\n` +
+                                `📝 <b>الوصف</b>: ${request.description}\n` +
+                                `⚡ <b>الأولوية</b>: ${priorityAr}\n` +
+                                `👤 <b>المُبلِّغ</b>: ${request.reporter?.name || 'موظف'}\n` +
+                                `🕐 <b>الوقت</b>: ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}`;
+                            const replyMarkup = {
+                                inline_keyboard: [
+                                    [{ text: "👨‍🔧 تعيين فني", callback_data: `assign_tech_${request.id}` }]
+                                ]
+                            };
+                            await TelegramService.sendMessage(chatId, text, replyMarkup);
+                            continue;
+                        }
+                    }
+                    if (sup.phoneNumber) {
+                        await whatsapp_service_1.WhatsAppService.sendWhatsAppMessage(sup.phoneNumber, notifyMsg);
+                    }
                 }
-                await whatsapp_service_1.WhatsAppService.sendWhatsAppMessage(sup.phoneNumber, notifyMsg);
+                catch (supErr) {
+                    console.error(`⚠️ Failed to notify supervisor ${sup.phoneNumber} for ticket ${request.ticketNumber}:`, supErr?.message || supErr);
+                }
             }
         }
         return request;
