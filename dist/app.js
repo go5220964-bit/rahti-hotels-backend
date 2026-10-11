@@ -360,6 +360,27 @@ app.get('/api/documents', document_controller_1.DocumentController.getAll);
 app.delete('/api/documents/:id', document_controller_1.DocumentController.delete);
 // Reports API Routes
 app.use('/api/reports', reports_controller_1.default);
+// Group Operational Daily Report API Routes
+app.post('/api/reports/groups/send-now', async (req, res) => {
+    try {
+        const { GroupReportService } = require('./services/group-report.service');
+        const result = await GroupReportService.sendDailyReportToManager(req.body.phone, req.body.date);
+        res.json(result);
+    }
+    catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+app.get('/api/reports/groups/preview', async (req, res) => {
+    try {
+        const { GroupReportService } = require('./services/group-report.service');
+        const report = await GroupReportService.generateDailyReport(req.query.date);
+        res.json({ success: true, report });
+    }
+    catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
 // Centralized Error Handling Middleware
 app.use(error_middleware_1.errorHandler);
 // Start Server if not imported by tests
@@ -369,6 +390,16 @@ if (process.env.NODE_ENV !== 'test') {
         console.log(`🚀 Rahti Hotels Operations Server is running on port ${PORT}`);
         console.log(`📡 WhatsApp Webhook URL: http://0.0.0.0:${PORT}/webhook`);
         console.log(`⚙️  Verify Token is set to: "${process.env.WEBHOOK_VERIFY_TOKEN}"`);
+        // Start automated daily timer for group report (11:00 PM KSA = 23:00 KSA)
+        setInterval(() => {
+            try {
+                const { GroupReportService } = require('./services/group-report.service');
+                GroupReportService.checkAndTriggerScheduledReport();
+            }
+            catch (err) {
+                console.error('❌ Error in group report scheduler:', err);
+            }
+        }, 60 * 1000);
         // Initialize Telegram Webhook if Messaging Platform is set to telegram
         if (process.env.MESSAGING_PLATFORM === 'telegram') {
             const { TelegramService } = require('./services/telegram.service');

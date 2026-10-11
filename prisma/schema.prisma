@@ -545,6 +545,22 @@ model StockAddition {
   createdAt         DateTime      @default(now())
 }
 
+model GroupMessage {
+  id          String   @id @default(cuid())
+  groupId     String
+  groupName   String
+  category    String   // reception | housekeeping | maintenance
+  senderPhone String
+  senderName  String
+  body        String   @db.Text
+  messageTime DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([groupId, createdAt])
+  @@index([category, createdAt])
+}
+
+
 enum Role {
   Admin
   FinanceManager

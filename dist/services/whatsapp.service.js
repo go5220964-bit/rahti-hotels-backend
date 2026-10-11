@@ -184,8 +184,21 @@ class WhatsAppService {
         // Ignore messages sent by the bot itself
         if (data.fromMe === true || data.fromMe === 'true')
             return messages;
-        // Ignore group chats and broadcast messages
-        if (data.from && (data.from.includes('@g.us') || data.from.includes('status@broadcast')))
+        // Handle monitored group chats for daily operational reports
+        if (data.from && data.from.includes('@g.us')) {
+            try {
+                const { GroupReportService } = require('./group-report.service');
+                GroupReportService.recordIncomingGroupMessage(data).catch((err) => {
+                    console.error('Error recording group message:', err);
+                });
+            }
+            catch (err) {
+                console.error('GroupReportService error:', err);
+            }
+            return messages; // Do not trigger 1-on-1 bot menu inside group
+        }
+        // Ignore broadcast messages
+        if (data.from && data.from.includes('status@broadcast'))
             return messages;
         let senderNumber = data.from || '';
         if (senderNumber.includes('@')) {
@@ -277,6 +290,16 @@ class WhatsAppService {
         if (user.botEnabled === false) {
             console.log(`🚫 WhatsApp bot is disabled for employee ${user.name} (${user.phoneNumber})`);
             return '';
+        }
+        // On-demand Admin Command: تقرير القروبات / ملخص القروبات
+        if (parsed.messageType === 'text' && (text.includes('تقرير القروبات') ||
+            text.includes('تقرير قروبات') ||
+            text.includes('ملخص القروبات') ||
+            text.includes('تقرير اليوم'))) {
+            if (user.role === 'Admin' || user.phoneNumber.includes('966563104828') || user.phoneNumber.includes('0563104828')) {
+                const { GroupReportService } = require('./group-report.service');
+                return await GroupReportService.generateDailyReport();
+            }
         }
         // Top-level 1: Cancel / Exit command
         if (parsed.messageType === 'text' && (text === 'إلغاء' || text === 'الغاء' || text === 'خروج' || textLower === 'cancel')) {
