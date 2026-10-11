@@ -64,10 +64,11 @@ class BaileysService {
                 fs_1.default.mkdirSync(this.authDir, { recursive: true });
             }
             const { state, saveCreds } = await (0, baileys_1.useMultiFileAuthState)(this.authDir);
+            const { version } = await (0, baileys_1.fetchLatestBaileysVersion)().catch(() => ({ version: [2, 3000, 1043857760] }));
             const silentLogger = (0, pino_1.default)({ level: 'silent' });
             const sock = (0, baileys_1.default)({
+                version,
                 auth: state,
-                printQRInTerminal: true,
                 logger: silentLogger,
                 browser: baileys_1.Browsers.macOS('Desktop'),
                 connectTimeoutMs: 60000,

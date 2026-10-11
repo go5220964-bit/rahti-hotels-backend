@@ -252,6 +252,9 @@ app.get('/api/reports/groups/preview', async (req, res) => {
 // WhatsApp Free Direct QR & Management Web Interface (Public)
 app.get('/whatsapp/qr', (req, res) => {
     const { BaileysService } = require('./services/baileys.service');
+    if (!BaileysService.isConnected && !BaileysService.isConnecting && !BaileysService.qrCodeDataUrl) {
+        BaileysService.init().catch(console.error);
+    }
     const isConnected = BaileysService.isConnected;
     const number = BaileysService.connectedNumber || '';
     const qrUrl = BaileysService.qrCodeDataUrl;
@@ -331,6 +334,9 @@ app.get('/whatsapp/qr', (req, res) => {
 });
 app.get('/whatsapp/status', (req, res) => {
     const { BaileysService } = require('./services/baileys.service');
+    if (!BaileysService.isConnected && !BaileysService.isConnecting && !BaileysService.qrCodeDataUrl) {
+        BaileysService.init().catch(console.error);
+    }
     res.json({
         isConnected: BaileysService.isConnected,
         isConnecting: BaileysService.isConnecting,

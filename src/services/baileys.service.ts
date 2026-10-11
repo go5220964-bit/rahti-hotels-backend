@@ -2,7 +2,8 @@ import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
   WASocket,
-  Browsers
+  Browsers,
+  fetchLatestBaileysVersion
 } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import path from 'path';
@@ -35,12 +36,13 @@ export class BaileysService {
       }
 
       const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
+      const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1043857760] as any }));
 
       const silentLogger = pino({ level: 'silent' });
 
       const sock = makeWASocket({
+        version,
         auth: state,
-        printQRInTerminal: true,
         logger: silentLogger,
         browser: Browsers.macOS('Desktop'),
         connectTimeoutMs: 60000,
