@@ -381,6 +381,100 @@ app.get('/api/reports/groups/preview', async (req, res) => {
         res.status(500).json({ success: false, error: err.message });
     }
 });
+// WhatsApp Free Direct QR & Management Web Interface
+app.get('/whatsapp/qr', (req, res) => {
+    const { BaileysService } = require('./services/baileys.service');
+    const isConnected = BaileysService.isConnected;
+    const number = BaileysService.connectedNumber || '';
+    const qrUrl = BaileysService.qrCodeDataUrl;
+    const html = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ربط الواتساب المجاني - فنادق راحتي</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: #0b141a; color: #e9edef; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; }
+    .card { background: #111b21; border: 1px solid #222e35; border-radius: 16px; padding: 32px; max-width: 460px; width: 100%; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    h1 { font-size: 1.4rem; color: #25d366; margin-bottom: 8px; }
+    p { color: #8696a0; font-size: 0.95rem; line-height: 1.5; margin: 8px 0 20px; }
+    .qr-box { background: white; padding: 16px; border-radius: 12px; display: inline-block; margin: 10px auto 20px; }
+    .qr-box img { display: block; width: 260px; height: 260px; }
+    .steps { text-align: right; background: #202c33; padding: 16px 20px; border-radius: 10px; font-size: 0.9rem; color: #d1d7db; line-height: 1.7; margin-bottom: 20px; }
+    .status-badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: 20px; font-weight: bold; font-size: 0.95rem; }
+    .connected { background: #1f3527; color: #25d366; border: 1px solid #25d366; }
+    .btn { background: #ea4335; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-top: 15px; }
+    .spinner { border: 4px solid #222e35; border-top: 4px solid #25d366; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 40px auto; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🏨 بوابة ربط الواتساب المجاني</h1>
+    <p>نظام شقق وفنادق راحتي (مجاني 100% بدون أي اشتراكات)</p>
+
+    ${isConnected ? `
+      <div class="status-badge connected">✅ متصل بالواتساب بنجاح</div>
+      <p style="margin-top: 16px; color: #e9edef;">رقم البوت النشط: <strong dir="ltr" style="color: #25d366;">+${number}</strong></p>
+      <div class="steps">
+        🎉 <strong>البوت يعمل وجاهز تماماً:</strong><br>
+        • يتابع قروبات الاستقبال والهاوسكيبنج والصيانة بهدوء.<br>
+        • يرسل التقارير اليومية مباشرة للمدير (أ. عمر).<br>
+        • يستقبل أوامر الموظفين والإدارة 24/7.
+      </div>
+      <form action="/whatsapp/logout" method="POST">
+        <button type="submit" class="btn">تسجيل الخروج والربط برقم آخر</button>
+      </form>
+    ` : qrUrl ? `
+      <div class="qr-box">
+        <img src="${qrUrl}" alt="WhatsApp QR Code">
+      </div>
+      <div class="steps">
+        <strong>📱 خطوات الربط من جوالك:</strong><br>
+        1. افتح تطبيق واتساب في هاتفك.<br>
+        2. اضغط على <strong>خيارات (الثلاث نقاط)</strong> أو <strong>الإعدادات</strong>.<br>
+        3. اختر <strong>الأجهزة المرتبطة (Linked Devices)</strong>.<br>
+        4. اضغط <strong>ربط جهاز</strong> ووجّه الكاميرا نحو هذا الباركود.
+      </div>
+      <p style="font-size: 0.85rem; color: #8696a0;">يتم تحديث الباركود تلقائياً...</p>
+    ` : `
+      <div class="spinner"></div>
+      <p>جاري توليد رمز الباركود... يرجى الانتظار ثوانٍ معدودة.</p>
+    `}
+  </div>
+
+  <script>
+    ${!isConnected ? `
+      setInterval(async () => {
+        try {
+          const res = await fetch('/whatsapp/status');
+          const data = await res.json();
+          if (data.isConnected) {
+            window.location.reload();
+          }
+        } catch (e) {}
+      }, 3000);
+      setTimeout(() => window.location.reload(), 20000);
+    ` : ''}
+  </script>
+</body>
+</html>`;
+    res.send(html);
+});
+app.get('/whatsapp/status', (req, res) => {
+    const { BaileysService } = require('./services/baileys.service');
+    res.json({
+        isConnected: BaileysService.isConnected,
+        isConnecting: BaileysService.isConnecting,
+        connectedNumber: BaileysService.connectedNumber,
+        hasQr: !!BaileysService.qrCodeDataUrl
+    });
+});
+app.post('/whatsapp/logout', async (req, res) => {
+    const { BaileysService } = require('./services/baileys.service');
+    await BaileysService.logout();
+    res.redirect('/whatsapp/qr');
+});
 // Centralized Error Handling Middleware
 app.use(error_middleware_1.errorHandler);
 // Start Server if not imported by tests
@@ -400,6 +494,14 @@ if (process.env.NODE_ENV !== 'test') {
                 console.error('❌ Error in group report scheduler:', err);
             }
         }, 60 * 1000);
+        // Initialize Free Baileys WhatsApp Service
+        try {
+            const { BaileysService } = require('./services/baileys.service');
+            BaileysService.init().catch((err) => console.error('Error initializing Baileys:', err));
+        }
+        catch (err) {
+            console.error('Failed to start Baileys service:', err);
+        }
         // Initialize Telegram Webhook if Messaging Platform is set to telegram
         if (process.env.MESSAGING_PLATFORM === 'telegram') {
             const { TelegramService } = require('./services/telegram.service');

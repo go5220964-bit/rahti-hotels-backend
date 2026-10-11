@@ -3383,6 +3383,16 @@ class WhatsAppService {
                 // ignore circular require
             }
             const provider = (process.env.WHATSAPP_PROVIDER || '').toLowerCase();
+            // 0. Free Baileys Direct Provider (100% Free)
+            try {
+                const { BaileysService } = require('./baileys.service');
+                if (provider === 'baileys' || BaileysService.isConnected) {
+                    const sent = await BaileysService.sendMessage(to, text);
+                    if (sent)
+                        return;
+                }
+            }
+            catch (e) { }
             // 1. UltraMsg Provider
             if (provider === 'ultramsg' || (process.env.ULTRAMSG_INSTANCE_ID && process.env.ULTRAMSG_TOKEN)) {
                 const instanceId = process.env.ULTRAMSG_INSTANCE_ID;
