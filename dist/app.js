@@ -344,6 +344,19 @@ app.get('/whatsapp/status', (req, res) => {
         hasQr: !!BaileysService.qrCodeDataUrl
     });
 });
+app.get('/whatsapp/debug', (req, res) => {
+    const { BaileysService } = require('./services/baileys.service');
+    res.json({
+        isConnected: BaileysService.isConnected,
+        isConnecting: BaileysService.isConnecting,
+        connectedNumber: BaileysService.connectedNumber,
+        hasQr: !!BaileysService.qrCodeDataUrl,
+        rawQrLength: BaileysService.rawQr ? BaileysService.rawQr.length : 0,
+        lastStatusCode: BaileysService.lastStatusCode,
+        lastError: BaileysService.lastError,
+        debugLogs: BaileysService.debugLogs
+    });
+});
 app.post('/whatsapp/logout', async (req, res) => {
     const { BaileysService } = require('./services/baileys.service');
     await BaileysService.logout();

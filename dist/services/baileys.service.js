@@ -49,6 +49,9 @@ class BaileysService {
     static isConnected = false;
     static isConnecting = false;
     static connectedNumber = null;
+    static lastError = null;
+    static lastStatusCode = null;
+    static debugLogs = [];
     static authDir = path_1.default.join(process.cwd(), 'baileys_auth');
     /**
      * تهيئة وبدء تشغيل خدمة الواتساب المباشرة المجانية
@@ -59,7 +62,9 @@ class BaileysService {
         }
         try {
             this.isConnecting = true;
-            console.log('🔄 [Baileys] جاري تهيئة الاتصال المجاني بالواتساب...');
+            this.debugLogs.push(`${new Date().toISOString()}: [init] بدء الاتصال بالواتساب...`);
+            if (this.debugLogs.length > 30)
+                this.debugLogs.shift();
             if (!fs_1.default.existsSync(this.authDir)) {
                 fs_1.default.mkdirSync(this.authDir, { recursive: true });
             }
@@ -79,6 +84,9 @@ class BaileysService {
             // 1. مراقبة حالة الاتصال والباركود
             sock.ev.on('connection.update', async (update) => {
                 const { connection, lastDisconnect, qr } = update;
+                this.debugLogs.push(`${new Date().toISOString()}: [update] keys: ${Object.keys(update).join(',')} | qr: ${!!qr} | conn: ${connection}`);
+                if (this.debugLogs.length > 30)
+                    this.debugLogs.shift();
                 if (qr) {
                     this.rawQr = qr;
                     try {
@@ -95,9 +103,13 @@ class BaileysService {
                 if (connection === 'close') {
                     this.isConnected = false;
                     this.isConnecting = false;
-                    this.qrCodeDataUrl = null;
                     const statusCode = lastDisconnect?.error?.output?.statusCode;
                     const shouldReconnect = statusCode !== baileys_1.DisconnectReason.loggedOut;
+                    this.lastStatusCode = statusCode || null;
+                    this.lastError = lastDisconnect?.error?.message || 'closed';
+                    this.debugLogs.push(`${new Date().toISOString()}: [close] code: ${statusCode} | err: ${this.lastError} | reconnect: ${shouldReconnect}`);
+                    if (this.debugLogs.length > 30)
+                        this.debugLogs.shift();
                     console.log(`🔌 [Baileys] انقطع اتصال الواتساب (الكود: ${statusCode}). إعادة المحاولة: ${shouldReconnect}`);
                     if (shouldReconnect) {
                         setTimeout(() => {
@@ -107,6 +119,8 @@ class BaileysService {
                     }
                     else {
                         console.log('⚠️ [Baileys] تم تسجيل الخروج من الواتساب. يلزم مسح الباركود مجدداً.');
+                        this.qrCodeDataUrl = null;
+                        this.rawQr = null;
                         this.logout();
                     }
                 }
@@ -117,6 +131,9 @@ class BaileysService {
                     this.rawQr = null;
                     const userJid = sock.user?.id || '';
                     this.connectedNumber = userJid.split(':')[0] || userJid.split('@')[0];
+                    this.debugLogs.push(`${new Date().toISOString()}: [open] تم الاتصال بنجاح! الرقم: ${this.connectedNumber}`);
+                    if (this.debugLogs.length > 30)
+                        this.debugLogs.shift();
                     console.log('\n======================================================');
                     console.log(`✅ [Baileys] متصل بالواتساب بنجاح! رقم البوت: +${this.connectedNumber}`);
                     console.log('======================================================\n');
