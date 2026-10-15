@@ -1,280 +1,128 @@
 import { Request, Response, NextFunction } from 'express';
-import { MaintenanceService } from '../services/maintenance.service';
-import { ApiResponse } from '../types';
+import prisma from '../services/prisma';
 
 export class MaintenanceController {
-  public static create = async (req: Request, res: Response, next: NextFunction) => {
+  public static getTickets = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { reportedBy, branchId, category, location, description, photoUrl, priority } = req.body;
-      const request = await MaintenanceService.createRequest({
-        reportedBy,
-        branchId,
-        category,
-        location,
-        description,
-        photoUrl,
-        priority
-      }, false);
+      const { branchId, status, priority } = req.query;
+      const whereClause: any = {};
 
-      // Send Telegram notification to Maintenance Supervisor if Telegram platform is active
-      try {
-        const prisma = require('../services/prisma').default;
-        const { WhatsAppService } = require('../services/whatsapp.service');
+      if (branchId) whereClause.branchId = String(branchId);
+      if (status && status !== 'ALL') whereClause.status = String(status);
+      if (priority && priority !== 'ALL') whereClause.priority = String(priority);
 
-        const supervisors = await prisma.user.findMany({
-          where: {
-            role: 'MaintenanceSupervisor',
-            isActive: true
-          }
-        });
-
-        const branchNameAr = request.branch?.name === 'Sail Road Branch' ? 'فرع طريق السيل' :
-                             request.branch?.name === 'Beachside Resort Branch' ? 'فرع منتجع الشاطئ' :
-                             request.branch?.name || '';
-
-        const categoryTranslation: Record<string, string> = {
-          Electrical: 'كهرباء',
-          Plumbing: 'سباكة',
-          AC: 'تكييف',
-          Carpentry: 'نجارة',
-          Cleaning: 'نظافة',
-          General: 'عام'
-        };
-        const priorityTranslation: Record<string, string> = {
-          Urgent: 'عاجل 🚨',
-          High: 'مرتفع ⚡',
-          Normal: 'عادي ⏱️',
-          Low: 'منخفض 💤'
-        };
-
-        const categoryAr = categoryTranslation[request.category] || request.category;
-        const priorityAr = priorityTranslation[request.priority] || request.priority;
-
-        if (process.env.MESSAGING_PLATFORM === 'telegram') {
-          const { TelegramService } = require('../services/telegram.service');
-          const tgText = `🔔 <b>بلاغ صيانة جديد #${request.ticketNumber}</b>\n\n` +
-            `🏨 <b>الفرع</b>: ${branchNameAr}\n` +
-            `🔧 <b>النوع</b>: ${categoryAr}\n` +
-            `📍 <b>الموقع</b>: ${request.location}\n` +
-            `📝 <b>الوصف</b>: ${request.description}\n` +
-            `⚡ <b>الأولوية</b>: ${priorityAr}\n` +
-            `👤 <b>المُبلِّغ</b>: ${request.reporter?.name || ''}\n` +
-            `🕐 <b>الوقت</b>: ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}`;
-
-          const replyMarkup = {
-            inline_keyboard: [
-              [{ text: "👨‍🔧 تعيين فني", callback_data: `assign_tech_${request.id}` }]
-            ]
-          };
-
-          for (const sup of supervisors) {
-            if (sup.branchId && sup.branchId !== request.branchId) {
-              continue;
-            }
-            const chatId = sup.telegramChatId || TelegramService.getChatIdByPhone(sup.phoneNumber);
-            if (chatId) {
-              await TelegramService.sendMessage(chatId, tgText, replyMarkup);
-            }
-          }
-        } else {
-          // Default: WhatsApp notification
-          const waText = `🔔 *بلاغ صيانة جديد #${request.ticketNumber}*\n\n` +
-            `🏨 *الفرع*: ${branchNameAr}\n` +
-            `🔧 *النوع*: ${categoryAr}\n` +
-            `📍 *الموقع*: ${request.location}\n` +
-            `📝 *الوصف*: ${request.description}\n` +
-            `⚡ *الأولوية*: ${priorityAr}\n` +
-            `👤 *المُبلِّغ*: ${request.reporter?.name || ''}\n` +
-            `🕐 *الوقت*: ${new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}\n\n` +
-            `[ 👷 تعيين فني ] (زر: assign_tech_btn_${request.id})`;
-
-          for (const sup of supervisors) {
-            if (sup.branchId && sup.branchId !== request.branchId) {
-              continue;
-            }
-            await WhatsAppService.sendWhatsAppMessage(sup.phoneNumber, waText);
-          }
-        }
-      } catch (notifyError: any) {
-        console.error('[Maintenance Controller] Failed to send notification:', notifyError.message);
-      }
-
-      const response: ApiResponse = {
-        success: true,
-        data: request
-      };
-      res.status(201).json(response);
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  public static getAll = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { status, branchId, assignedTo, category, priority, dateFrom, dateTo } = req.query;
-      const requests = await MaintenanceService.getRequests({
-        status: status as string,
-        branchId: branchId as string,
-        assignedTo: assignedTo as string,
-        category: category as string,
-        priority: priority as string,
-        dateFrom: dateFrom as string,
-        dateTo: dateTo as string
+      const tickets = await prisma.maintenanceTicket.findMany({
+        where: whereClause,
+        include: {
+          branch: true,
+          createdBy: { select: { id: true, name: true, phone: true } },
+          technician: { select: { id: true, name: true, phone: true } }
+        },
+        orderBy: { createdAt: 'desc' }
       });
-      const response: ApiResponse = {
-        success: true,
-        data: requests
-      };
-      res.status(200).json(response);
+
+      res.status(200).json({ success: true, data: tickets });
     } catch (error) {
       next(error);
     }
   };
 
-  public static getStats = async (req: Request, res: Response, next: NextFunction) => {
+  public static createTicket = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const stats = await MaintenanceService.getStats();
-      const response: ApiResponse = {
-        success: true,
-        data: stats
-      };
-      res.status(200).json(response);
+      const { title, description, roomNumber, priority, branchId, createdById, technicianId } = req.body;
+
+      const resolvedBranchId = branchId || (req as any).user?.branchId;
+      const resolvedCreatedById = createdById || (req as any).user?.id;
+
+      const ticket = await prisma.maintenanceTicket.create({
+        data: {
+          title,
+          description: description || '',
+          roomNumber: roomNumber ? String(roomNumber) : null,
+          priority: priority || 'MEDIUM',
+          branchId: String(resolvedBranchId),
+          createdById: String(resolvedCreatedById),
+          ...(technicianId ? { technicianId: String(technicianId) } : {})
+        },
+        include: {
+          branch: true,
+          createdBy: { select: { id: true, name: true } },
+          technician: { select: { id: true, name: true } }
+        }
+      });
+
+      res.status(201).json({ success: true, data: ticket });
     } catch (error) {
       next(error);
     }
   };
 
-  public static getWorkload = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const workload = await MaintenanceService.getTechnicianWorkload();
-      const response: ApiResponse = {
-        success: true,
-        data: workload
-      };
-      res.status(200).json(response);
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  public static getById = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { id } = req.params;
-      const request = await MaintenanceService.getRequestById(id);
-      if (!request) {
-        res.status(404).json({ success: false, error: 'Request not found' });
-        return;
-      }
-      const response: ApiResponse = {
-        success: true,
-        data: request
-      };
-      res.status(200).json(response);
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  public static assign = async (req: Request, res: Response, next: NextFunction) => {
+  public static updateTicket = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const { technicianId, supervisorId } = req.body;
-      const request = await MaintenanceService.assignTechnician(id, technicianId, supervisorId);
-      const response: ApiResponse = {
-        success: true,
-        data: request
-      };
-      res.status(200).json(response);
+      const { status, technicianId, priority, description } = req.body;
+
+      const updateData: any = {};
+      if (status) updateData.status = status;
+      if (technicianId !== undefined) updateData.technicianId = technicianId || null;
+      if (priority) updateData.priority = priority;
+      if (description !== undefined) updateData.description = description;
+
+      const ticket = await prisma.maintenanceTicket.update({
+        where: { id },
+        data: updateData,
+        include: {
+          branch: true,
+          createdBy: { select: { id: true, name: true } },
+          technician: { select: { id: true, name: true } }
+        }
+      });
+
+      res.status(200).json({ success: true, data: ticket });
     } catch (error) {
       next(error);
     }
   };
 
-  public static start = async (req: Request, res: Response, next: NextFunction) => {
+  public static updateStatus = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const { technicianId } = req.body;
-      const request = await MaintenanceService.startWork(id, technicianId);
-      const response: ApiResponse = {
-        success: true,
-        data: request
-      };
-      res.status(200).json(response);
+      const { status, technicianId } = req.body;
+      const ticket = await prisma.maintenanceTicket.update({
+        where: { id },
+        data: {
+          status,
+          ...(technicianId ? { technicianId } : {})
+        },
+        include: {
+          branch: true,
+          createdBy: { select: { id: true, name: true } },
+          technician: { select: { id: true, name: true } }
+        }
+      });
+      res.status(200).json({ success: true, data: ticket });
     } catch (error) {
       next(error);
     }
   };
 
-  public static complete = async (req: Request, res: Response, next: NextFunction) => {
+  public static assignTechnician = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const { technicianId, completionNote, completionPhotoUrl } = req.body;
-      const request = await MaintenanceService.submitCompletion(id, technicianId, completionNote, completionPhotoUrl);
-      const response: ApiResponse = {
-        success: true,
-        data: request
-      };
-      res.status(200).json(response);
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  public static approve = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { id } = req.params;
-      const { approverId, supervisorNote } = req.body;
-      const request = await MaintenanceService.approveCompletion(id, approverId, supervisorNote);
-      const response: ApiResponse = {
-        success: true,
-        data: request
-      };
-      res.status(200).json(response);
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  public static reject = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { id } = req.params;
-      const { approverId, rejectionReason } = req.body;
-      const request = await MaintenanceService.rejectCompletion(id, approverId, rejectionReason);
-      const response: ApiResponse = {
-        success: true,
-        data: request
-      };
-      res.status(200).json(response);
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  public static spareParts = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { id } = req.params;
-      const { technicianId, description } = req.body;
-      const request = await MaintenanceService.requestSpareParts(id, technicianId, description);
-      const response: ApiResponse = {
-        success: true,
-        data: request
-      };
-      res.status(200).json(response);
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  public static resume = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { id } = req.params;
-      const { supervisorId } = req.body;
-      const request = await MaintenanceService.resumeAfterParts(id, supervisorId);
-      const response: ApiResponse = {
-        success: true,
-        data: request
-      };
-      res.status(200).json(response);
+      const { technicianId, status } = req.body;
+      const ticket = await prisma.maintenanceTicket.update({
+        where: { id },
+        data: {
+          technicianId,
+          ...(status ? { status } : {})
+        },
+        include: {
+          branch: true,
+          createdBy: { select: { id: true, name: true } },
+          technician: { select: { id: true, name: true } }
+        }
+      });
+      res.status(200).json({ success: true, data: ticket });
     } catch (error) {
       next(error);
     }

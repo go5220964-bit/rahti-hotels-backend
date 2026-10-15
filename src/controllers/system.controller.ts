@@ -1,22 +1,61 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../services/prisma';
-import { ActivityLogService } from '../services/activity-log.service';
-import { ApiResponse } from '../types';
-import { AppError } from '../middleware/error.middleware';
+
+const DEFAULT_SYSTEM_SETTINGS: Record<string, string> = {
+  whatsappBotEnabled: 'true',
+  whatsappWebhookUrl: '',
+  twilioAccountSid: '',
+  twilioAuthToken: '',
+  twilioPhoneNumber: '',
+  geminiApiKey: '',
+  geminiModel: 'gemini-2.5-flash',
+  geofenceEnabled: 'true',
+  geofenceLatitude: '21.34153721641272',
+  geofenceLongitude: '40.43970895038688',
+  geofenceRadiusMeters: '200',
+  currencyCode: 'SAR',
+  currencySymbol: 'ر.س',
+  defaultBranchName: 'راحتي للشقق المخدومة'
+};
 
 export class SystemController {
-  // Settings / Integrations
   public static getSettings = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const settings = await prisma.systemSetting.findMany();
-      const response: ApiResponse = {
+      let settingsList: Array<{ key: string; value: string }> = [];
+      try {
+        settingsList = await prisma.systemSetting.findMany();
+      } catch {
+        settingsList = [];
+      }
+
+      const mergedSettings: Record<string, string> = { ...DEFAULT_SYSTEM_SETTINGS };
+      for (const item of settingsList) {
+        if (item && item.key) {
+          mergedSettings[item.key] = item.value;
+        }
+      }
+
+      res.status(200).json({
         success: true,
-        data: settings.reduce((acc: any, curr) => {
-          acc[curr.key] = curr.value;
-          return acc;
-        }, {})
-      };
-      res.status(200).json(response);
+        data: mergedSettings,
+        integrations: {
+          whatsapp: {
+            enabled: mergedSettings.whatsappBotEnabled === 'true',
+            webhookUrl: mergedSettings.whatsappWebhookUrl,
+            phoneNumber: mergedSettings.twilioPhoneNumber
+          },
+          gemini: {
+            configured: Boolean(mergedSettings.geminiApiKey),
+            model: mergedSettings.geminiModel
+          },
+          geofence: {
+            enabled: mergedSettings.geofenceEnabled === 'true',
+            latitude: parseFloat(mergedSettings.geofenceLatitude),
+            longitude: parseFloat(mergedSettings.geofenceLongitude),
+            radiusMeters: parseInt(mergedSettings.geofenceRadiusMeters, 10)
+          }
+        }
+      });
     } catch (error) {
       next(error);
     }
@@ -24,144 +63,23 @@ export class SystemController {
 
   public static updateSettings = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const settingsObj = req.body.settings || req.body || {};
-      const user = (req as any).user || { id: 'system' };
+      const rawPayload = req.body?.settings || req.body || {};
+      const entries = Object.entries(rawPayload).filter(
+        ([key, val]) => key && typeof val !== 'object' && val !== undefined
+      );
 
-      for (const [key, value] of Object.entries(settingsObj)) {
-        if (typeof value === 'object' && value !== null) continue;
+      for (const [key, value] of entries) {
         await prisma.systemSetting.upsert({
           where: { key },
-          update: { value: String(value), updatedBy: user.id },
-          create: { key, value: String(value), updatedBy: user.id }
+          update: { value: String(value ?? '') },
+          create: { key, value: String(value ?? '') }
         });
       }
 
-      await ActivityLogService.log(
-        user.id,
-        'UPDATE_SETTINGS',
-        'SystemSetting',
-        'global',
-        settingsObj,
-        req.ip
-      );
-
-      const response: ApiResponse = {
+      res.status(200).json({
         success: true,
-        data: { message: 'Settings successfully updated' }
-      };
-      res.status(200).json(response);
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  // Activity Logs
-  public static getLogs = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const limit = parseInt(req.query.limit as string) || 100;
-      const offset = parseInt(req.query.offset as string) || 0;
-      const logs = await ActivityLogService.getLogs(limit, offset);
-      const response: ApiResponse = {
-        success: true,
-        data: logs
-      };
-      res.status(200).json(response);
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  // Role Permissions
-  public static getRolePermissions = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const setting = await prisma.systemSetting.findUnique({
-        where: { key: 'role_permission_matrix' }
+        message: 'تم حفظ وتحديث إعدادات الربط والنظام بنجاح'
       });
-
-      // Default matrix if not set
-      const defaultMatrix = {
-        Admin: ['overview', 'employees', 'shifts', 'attendance', 'leaves', 'loans', 'shift-reports', 'receptionist-stats', 'maintenance', 'warehouse', 'procurement', 'lost-found', 'documents', 'reports', 'system'],
-        CEO: ['overview', 'employees', 'shifts', 'attendance', 'leaves', 'loans', 'shift-reports', 'receptionist-stats', 'maintenance', 'warehouse', 'procurement', 'lost-found', 'documents', 'reports'],
-        BranchManager: ['overview', 'employees', 'shifts', 'attendance', 'leaves', 'loans', 'shift-reports', 'maintenance', 'lost-found', 'documents', 'reports'],
-        Receptionist: ['overview', 'attendance', 'shift-reports', 'lost-found'],
-        Accountant: ['overview', 'shift-reports', 'receptionist-stats', 'loans', 'reports'],
-        Supervisor: ['overview', 'maintenance', 'warehouse'], // e.g. MaintenanceSupervisor
-        Storekeeper: ['overview', 'warehouse', 'procurement'] // e.g. WarehouseManager
-      };
-
-      const matrix = setting ? JSON.parse(setting.value) : defaultMatrix;
-
-      const response: ApiResponse = {
-        success: true,
-        data: matrix
-      };
-      res.status(200).json(response);
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  public static updateRolePermissions = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { matrix } = req.body;
-      const user = (req as any).user || { id: 'system' };
-
-      await prisma.systemSetting.upsert({
-        where: { key: 'role_permission_matrix' },
-        update: { value: JSON.stringify(matrix), updatedBy: user.id },
-        create: { key: 'role_permission_matrix', value: JSON.stringify(matrix), updatedBy: user.id }
-      });
-
-      await ActivityLogService.log(
-        user.id,
-        'UPDATE_ROLE_PERMISSIONS',
-        'SystemSetting',
-        'role_permission_matrix',
-        matrix,
-        req.ip
-      );
-
-      const response: ApiResponse = {
-        success: true,
-        data: { message: 'Role permissions matrix successfully updated' }
-      };
-      res.status(200).json(response);
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  // User Activation/Deactivation and System Users CRUD
-  public static toggleUserStatus = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { id } = req.params;
-      const { isActive } = req.body;
-      const user = (req as any).user || { id: 'system' };
-
-      const targetUser = await prisma.user.findUnique({ where: { id } });
-      if (!targetUser) {
-        throw new AppError(404, 'USER_NOT_FOUND', 'المستخدم غير موجود');
-      }
-
-      const updatedUser = await prisma.user.update({
-        where: { id },
-        data: { isActive }
-      });
-
-      await ActivityLogService.log(
-        user.id,
-        isActive ? 'ACTIVATE_USER' : 'DEACTIVATE_USER',
-        'User',
-        id,
-        { name: targetUser.name, role: targetUser.role },
-        req.ip
-      );
-
-      const response: ApiResponse = {
-        success: true,
-        data: updatedUser
-      };
-      res.status(200).json(response);
     } catch (error) {
       next(error);
     }
