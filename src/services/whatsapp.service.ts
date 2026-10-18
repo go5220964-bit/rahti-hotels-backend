@@ -728,13 +728,17 @@ export class WhatsAppService {
     }
 
     if (text === 'حضور') {
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+      const frontendUrl = (process.env.FRONTEND_URL && !process.env.FRONTEND_URL.includes('localhost'))
+        ? process.env.FRONTEND_URL
+        : 'https://rahti-hotels-frontend.vercel.app';
       return `للتحقق وتسجيل حضورك، يرجى الضغط على الرابط التالي وتأكيد موقعك الجغرافي:\n` +
              `${frontendUrl}/attendance/check-in?userId=${user.id}&type=CheckIn`;
     }
 
     if (text === 'انصراف') {
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+      const frontendUrl = (process.env.FRONTEND_URL && !process.env.FRONTEND_URL.includes('localhost'))
+        ? process.env.FRONTEND_URL
+        : 'https://rahti-hotels-frontend.vercel.app';
       return `للتحقق وتسجيل انصرافك، يرجى الضغط على الرابط التالي وتأكيد موقعك الجغرافي:\n` +
              `${frontendUrl}/attendance/check-in?userId=${user.id}&type=CheckOut`;
     }
