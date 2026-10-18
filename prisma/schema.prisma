@@ -43,6 +43,8 @@ model User {
   employeeDocuments   Document[] @relation("EmployeeDocuments")
   transfers           EmployeeTransfer[] @relation("EmployeeTransfers")
   attendanceRecords   AttendanceRecord[]
+  receptionSchedules  ReceptionSchedule[] @relation("ReceptionEmployee")
+  coveredSchedules    ReceptionSchedule[] @relation("CoveredSchedule")
   botEnabled          Boolean   @default(true)
   email               String?
   telegramChatId      String?
@@ -70,6 +72,7 @@ model Branch {
   damageReports    DamageReport[]
   documents        Document[]
   attendanceRecords AttendanceRecord[]
+  receptionSchedules ReceptionSchedule[]
   transfersFrom       EmployeeTransfer[]   @relation("TransfersFrom")
   transfersTo         EmployeeTransfer[]   @relation("TransfersTo")
   loanRequests        LoanRequest[]
@@ -775,4 +778,24 @@ enum Department {
   BRANCH
   HR
   MAINTENANCE
+}
+
+model ReceptionSchedule {
+  id           String    @id @default(cuid())
+  branchId     String
+  branch       Branch    @relation(fields: [branchId], references: [id])
+  employeeId   String
+  employee     User      @relation("ReceptionEmployee", fields: [employeeId], references: [id])
+  date         DateTime  @db.Date
+  shiftType    String    // "Morning" | "Evening" | "Night" | "Off"
+  shiftName    String?   // "الوردية الصباحية (07:00 - 15:00)"
+  status       String    @default("Scheduled") // "Scheduled" | "Off" | "Leave" | "Covered"
+  isCoverage   Boolean   @default(false)
+  coveredForId String?
+  coveredFor   User?     @relation("CoveredSchedule", fields: [coveredForId], references: [id])
+  notes        String?   @db.Text
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([branchId, employeeId, date])
 }

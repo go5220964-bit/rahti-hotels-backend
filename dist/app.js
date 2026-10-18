@@ -14,6 +14,7 @@ const system_controller_1 = require("./controllers/system.controller");
 const shiftReport_controller_1 = require("./controllers/shiftReport.controller");
 const shift_controller_1 = require("./controllers/shift.controller");
 const attendance_controller_1 = require("./controllers/attendance.controller");
+const reception_schedule_controller_1 = require("./controllers/reception-schedule.controller");
 const loan_controller_1 = require("./controllers/loan.controller");
 const leave_controller_1 = require("./controllers/leave.controller");
 const maintenance_controller_1 = require("./controllers/maintenance.controller");
@@ -227,7 +228,15 @@ app.post('/api/auth/login', auth_controller_1.AuthController.login);
 // Public Geolocation Attendance & Profile Routes
 app.post('/api/attendance/check-in', (0, validate_middleware_1.validate)(attendance_controller_1.attendanceRecordSchema), attendance_controller_1.AttendanceController.checkIn);
 app.post('/api/attendance/check-out', (0, validate_middleware_1.validate)(attendance_controller_1.attendanceRecordSchema), attendance_controller_1.AttendanceController.checkOut);
+app.get('/api/attendance/logs', attendance_controller_1.AttendanceController.getLogs);
 app.get('/api/users/:id/public-profile', user_controller_1.UserController.getPublicProfile);
+// Reception Staff Schedule & Coverage Routes
+app.get('/api/reception-schedule', reception_schedule_controller_1.ReceptionScheduleController.getSchedule);
+app.get('/api/reception-schedule/receptionists', reception_schedule_controller_1.ReceptionScheduleController.getReceptionists);
+app.post('/api/reception-schedule/slot', reception_schedule_controller_1.ReceptionScheduleController.upsertSlot);
+app.post('/api/reception-schedule/auto-generate', reception_schedule_controller_1.ReceptionScheduleController.autoGenerate);
+app.post('/api/reception-schedule/coverage', reception_schedule_controller_1.ReceptionScheduleController.assignCoverage);
+app.get('/api/reception-schedule/my-schedule/:userId', reception_schedule_controller_1.ReceptionScheduleController.getMySchedule);
 // Group Operational Daily Report API Routes
 app.post('/api/reports/groups/send-now', async (req, res) => {
     try {

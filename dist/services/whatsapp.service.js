@@ -357,9 +357,9 @@ class WhatsAppService {
         if (parsed.messageType === 'button_reply') {
             return await this.handleButtonReply(parsed, user);
         }
-        // Handle location messages
+        // Handle location messages (GPS Punch Verification)
         if (parsed.messageType === 'location') {
-            return `❌ تسجيل الحضور عبر إرسال الموقع الجغرافي مباشرة ملغى لتفادي التزييف. يرجى استخدام الرابط المخصص لتسجيل بصمة الحضور/الانصراف الخاص بك.`;
+            return await this.handleAttendanceLocation(parsed, user);
         }
         // Routing Active Supervisor & Technician Sessions
         if (this.supervisorAssignSessions.has(user.phoneNumber)) {
@@ -659,19 +659,31 @@ class WhatsAppService {
                 return `📋 يرجى إدخال تفاصيل طلبك الإداري:`;
             }
         }
-        if (text === 'حضور') {
+        if (text === 'حضور' || text === 'تسجيل حضور' || text === 'بصمة حضور' || text === 'دخول') {
+            this.attendanceSessions.set(user.phoneNumber, 'CheckIn');
             const frontendUrl = (process.env.FRONTEND_URL && !process.env.FRONTEND_URL.includes('localhost'))
                 ? process.env.FRONTEND_URL
                 : 'https://rahti-hotels-frontend.vercel.app';
-            return `للتحقق وتسجيل حضورك، يرجى الضغط على الرابط التالي وتأكيد موقعك الجغرافي:\n` +
+            return `📍 *تسجيل بصمة الحضور*\n\n` +
+                `يرجى مشاركة موقعك الجغرافي لتأكيد تواجدك داخل مقر الفندق:\n\n` +
+                `1️⃣ *مباشرة عبر الواتساب*: اضغط زر المشبك 📎 أسفل المحادثة ثم اختر *الموقع 📍* ثم *"إرسال موقعك الحالي"*.\n\n` +
+                `2️⃣ *أو عبر الرابط المباشر*:\n` +
                 `${frontendUrl}/attendance/check-in?userId=${user.id}&type=CheckIn`;
         }
-        if (text === 'انصراف') {
+        if (text === 'انصراف' || text === 'تسجيل انصراف' || text === 'بصمة انصراف' || text === 'خروج') {
+            this.attendanceSessions.set(user.phoneNumber, 'CheckOut');
             const frontendUrl = (process.env.FRONTEND_URL && !process.env.FRONTEND_URL.includes('localhost'))
                 ? process.env.FRONTEND_URL
                 : 'https://rahti-hotels-frontend.vercel.app';
-            return `للتحقق وتسجيل انصرافك، يرجى الضغط على الرابط التالي وتأكيد موقعك الجغرافي:\n` +
+            return `📍 *تسجيل بصمة الانصراف*\n\n` +
+                `يرجى مشاركة موقعك الجغرافي لتأكيد الانصراف:\n\n` +
+                `1️⃣ *مباشرة عبر الواتساب*: اضغط زر المشبك 📎 أسفل المحادثة ثم اختر *الموقع 📍* ثم *"إرسال موقعك الحالي"*.\n\n` +
+                `2️⃣ *أو عبر الرابط المباشر*:\n` +
                 `${frontendUrl}/attendance/check-in?userId=${user.id}&type=CheckOut`;
+        }
+        if (text === 'جدولي' || text === 'دوامي' || text === 'ورديتي' || text === 'شفتي' || text === 'مناوبتي' || text === 'جدول') {
+            const { ReceptionScheduleService } = require('./reception-schedule.service');
+            return await ReceptionScheduleService.formatScheduleForWhatsApp(user.id);
         }
         if (text === 'تقفيلة' || text === 'تقفيل' || textLower === 'shift') {
             const allowedRoles = [types_1.Role.Admin, types_1.Role.Receptionist];
@@ -2141,28 +2153,23 @@ class WhatsAppService {
         return `⚠️ أمر غير معروف في جلسة التقفيلة.`;
     }
     static async handleAttendanceLocation(parsed, user) {
-        const type = this.attendanceSessions.get(user.phoneNumber);
+        const type = this.attendanceSessions.get(user.phoneNumber) || 'CheckIn';
         this.attendanceSessions.delete(user.phoneNumber);
         const lat = parsed.latitude;
         const lng = parsed.longitude;
         try {
             const { GeoService } = require('./geo.service');
             const result = await GeoService.recordAttendance(user.id, type, lat, lng);
-            const timeStr = new Date(result.timestamp).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+            const timeStr = new Date(result.timestamp).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
             const branchNameAr = result.branchName === 'Sail Road Branch' ? 'فرع طريق السيل' :
                 result.branchName === 'Beachside Resort Branch' ? 'فرع منتجع الشاطئ' :
                     result.branchName;
+            const punchName = type === 'CheckIn' ? 'حضور' : 'انصراف';
             if (result.isValid) {
-                return `✅ تم تسجيل ${type === 'CheckIn' ? 'حضورك' : 'انصرافك'} بنجاح\n` +
-                    `📍 الفرع: ${branchNameAr}\n` +
-                    `🕐 الوقت: ${timeStr}\n` +
-                    `📏 المسافة: ${Math.round(result.distanceMeters)} متر`;
+                return `✅ تم تسجيل بصمة ${punchName} بنجاح الساعة ${timeStr} في ${branchNameAr}.\n📍 المسافة عن الفرع: ${Math.round(result.distanceMeters)} متر.`;
             }
             else {
-                return `❌ لم يتم تسجيل الحضور\n` +
-                    `أنت خارج النطاق الجغرافي المحدد.\n` +
-                    `📏 مسافتك: ${Math.round(result.distanceMeters)} متر (الحد المسموح: ${result.radiusLimit} متر)\n` +
-                    `يرجى مراجعة إدارة الموارد البشرية أو مدير الفرع لتسجيل الحضور يدوياً.`;
+                return `❌ لم يتم تسجيل البصمة: أنت خارج النطاق الجغرافي للفرع.\n📍 المسافة الحالية: ${Math.round(result.distanceMeters)} متر (المسموح: ${result.radiusLimit} متر).\nيرجى التواجد داخل مقر الفندق أو التواصل مع الإدارة.`;
             }
         }
         catch (error) {

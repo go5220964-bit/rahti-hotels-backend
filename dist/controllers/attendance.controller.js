@@ -15,6 +15,18 @@ class AttendanceController {
         try {
             const { userId, lat, lng } = req.body;
             const result = await geo_service_1.GeoService.recordAttendance(userId, 'CheckIn', lat, lng);
+            if (!result.isValid) {
+                res.status(400).json({
+                    success: false,
+                    message: '❌ لم يتم تسجيل البصمة: أنت خارج النطاق الجغرافي للفرع. تواصل مع الإدارة.',
+                    error: {
+                        code: 'OUT_OF_GEOFENCE',
+                        message: '❌ لم يتم تسجيل البصمة: أنت خارج النطاق الجغرافي للفرع. تواصل مع الإدارة.'
+                    },
+                    data: result
+                });
+                return;
+            }
             const response = {
                 success: true,
                 data: result
@@ -29,6 +41,18 @@ class AttendanceController {
         try {
             const { userId, lat, lng } = req.body;
             const result = await geo_service_1.GeoService.recordAttendance(userId, 'CheckOut', lat, lng);
+            if (!result.isValid) {
+                res.status(400).json({
+                    success: false,
+                    message: '❌ لم يتم تسجيل البصمة: أنت خارج النطاق الجغرافي للفرع. تواصل مع الإدارة.',
+                    error: {
+                        code: 'OUT_OF_GEOFENCE',
+                        message: '❌ لم يتم تسجيل البصمة: أنت خارج النطاق الجغرافي للفرع. تواصل مع الإدارة.'
+                    },
+                    data: result
+                });
+                return;
+            }
             const response = {
                 success: true,
                 data: result
@@ -87,6 +111,27 @@ class AttendanceController {
             const response = {
                 success: true,
                 data: records
+            };
+            res.status(200).json(response);
+        }
+        catch (error) {
+            next(error);
+        }
+    };
+    static getLogs = async (req, res, next) => {
+        try {
+            const { branchId, startDate, endDate, isValid, userId } = req.query;
+            const parsedIsValid = isValid !== undefined ? isValid === 'true' : undefined;
+            const logs = await geo_service_1.GeoService.getAllAttendanceLogs({
+                branchId: branchId,
+                startDate: startDate,
+                endDate: endDate,
+                isValid: parsedIsValid,
+                userId: userId
+            });
+            const response = {
+                success: true,
+                data: logs
             };
             res.status(200).json(response);
         }

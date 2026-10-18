@@ -101,7 +101,35 @@ export class GeoService {
     // 3. Branch-specific geofence check
     const isValid = distanceMeters <= radiusLimit;
     if (!isValid) {
-      throw new AppError(400, 'OUT_OF_GEOFENCE', `❌ فشل تسجيل الحضور: أنت خارج النطاق الجغرافي المسموح به للفرع (تبعد ${Math.round(distanceMeters)} متر، والحد الأقصى هو ${radiusLimit} متر).`);
+      // Save rejected attendance punch to AttendanceLog for full audit trace and reports
+      const log = await prisma.attendanceLog.create({
+        data: {
+          userId: user.id,
+          branchId: targetBranchId,
+          type,
+          lat: employeeLat,
+          lng: employeeLng,
+          distanceMeters,
+          isValid: false,
+          rejectionReason: `خارج النطاق الجغرافي للفرع (المسافة: ${Math.round(distanceMeters)} متر، المسموح: ${radiusLimit} متر)`
+        },
+        include: {
+          user: {
+            select: { id: true, name: true, role: true, employeeType: true }
+          },
+          branch: true
+        }
+      });
+
+      return {
+        log,
+        isValid: false,
+        branchName: targetBranchName,
+        distanceMeters,
+        radiusLimit,
+        timestamp: log.timestamp,
+        rejectionReason: log.rejectionReason
+      };
     }
 
     // 4. Match Shift and determine status
@@ -437,5 +465,57 @@ export class GeoService {
       totalEmployees,
       branchSummaries
     };
+  }
+
+  /**
+   * Fetch all attendance punch logs (valid and rejected) with optional filters
+   */
+  public static async getAllAttendanceLogs(params: {
+    branchId?: string;
+    startDate?: string;
+    endDate?: string;
+    isValid?: boolean;
+    userId?: string;
+  } = {}) {
+    const where: any = {};
+
+    if (params.branchId && params.branchId !== 'ALL') {
+      where.branchId = params.branchId;
+    }
+
+    if (params.userId) {
+      where.userId = params.userId;
+    }
+
+    if (typeof params.isValid === 'boolean') {
+      where.isValid = params.isValid;
+    }
+
+    if (params.startDate || params.endDate) {
+      where.timestamp = {};
+      if (params.startDate) {
+        const start = new Date(params.startDate);
+        start.setHours(0, 0, 0, 0);
+        where.timestamp.gte = start;
+      }
+      if (params.endDate) {
+        const end = new Date(params.endDate);
+        end.setHours(23, 59, 59, 999);
+        where.timestamp.lte = end;
+      }
+    }
+
+    return await prisma.attendanceLog.findMany({
+      where,
+      include: {
+        user: {
+          select: { id: true, name: true, role: true, employeeType: true, phoneNumber: true }
+        },
+        branch: {
+          select: { id: true, name: true, location: true }
+        }
+      },
+      orderBy: { timestamp: 'desc' }
+    });
   }
 }

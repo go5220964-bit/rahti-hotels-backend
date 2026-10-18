@@ -11,6 +11,7 @@ import { SystemController } from './controllers/system.controller';
 import { ShiftReportController, createShiftReportSchema, approveShiftReportSchema, rejectShiftReportSchema, updateShiftReportSchema } from './controllers/shiftReport.controller';
 import { ShiftController, createShiftSchema, updateShiftSchema } from './controllers/shift.controller';
 import { AttendanceController, attendanceRecordSchema } from './controllers/attendance.controller';
+import { ReceptionScheduleController } from './controllers/reception-schedule.controller';
 import { LoanController, createLoanSchema, reviewLoanSchema } from './controllers/loan.controller';
 import { LeaveController, createLeaveSchema, reviewLeaveSchema, adjustBalanceSchema } from './controllers/leave.controller';
 import { MaintenanceController } from './controllers/maintenance.controller';
@@ -263,7 +264,16 @@ app.post('/api/auth/login', AuthController.login);
 // Public Geolocation Attendance & Profile Routes
 app.post('/api/attendance/check-in', validate(attendanceRecordSchema), AttendanceController.checkIn);
 app.post('/api/attendance/check-out', validate(attendanceRecordSchema), AttendanceController.checkOut);
+app.get('/api/attendance/logs', AttendanceController.getLogs);
 app.get('/api/users/:id/public-profile', UserController.getPublicProfile);
+
+// Reception Staff Schedule & Coverage Routes
+app.get('/api/reception-schedule', ReceptionScheduleController.getSchedule);
+app.get('/api/reception-schedule/receptionists', ReceptionScheduleController.getReceptionists);
+app.post('/api/reception-schedule/slot', ReceptionScheduleController.upsertSlot);
+app.post('/api/reception-schedule/auto-generate', ReceptionScheduleController.autoGenerate);
+app.post('/api/reception-schedule/coverage', ReceptionScheduleController.assignCoverage);
+app.get('/api/reception-schedule/my-schedule/:userId', ReceptionScheduleController.getMySchedule);
 
 // Group Operational Daily Report API Routes
 app.post('/api/reports/groups/send-now', async (req, res) => {
