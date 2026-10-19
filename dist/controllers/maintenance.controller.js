@@ -5,10 +5,12 @@ const maintenance_service_1 = require("../services/maintenance.service");
 class MaintenanceController {
     static create = async (req, res, next) => {
         try {
-            const { reportedBy, branchId, category, location, description, photoUrl, priority } = req.body;
+            const { reportedBy, branchId, unitId, assetId, category, location, description, photoUrl, priority } = req.body;
             const request = await maintenance_service_1.MaintenanceService.createRequest({
                 reportedBy,
                 branchId,
+                unitId,
+                assetId,
                 category,
                 location,
                 description,
@@ -245,8 +247,13 @@ class MaintenanceController {
     static spareParts = async (req, res, next) => {
         try {
             const { id } = req.params;
-            const { technicianId, description } = req.body;
-            const request = await maintenance_service_1.MaintenanceService.requestSpareParts(id, technicianId, description);
+            const { technicianId, description, itemId, itemName, quantity } = req.body;
+            const request = await maintenance_service_1.MaintenanceService.requestSpareParts(id, technicianId, {
+                description: description || itemName || 'طلب قطع غيار',
+                itemId,
+                itemName,
+                quantity: quantity ? Number(quantity) : 1
+            });
             const response = {
                 success: true,
                 data: request

@@ -5,10 +5,12 @@ import { ApiResponse } from '../types';
 export class MaintenanceController {
   public static create = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { reportedBy, branchId, category, location, description, photoUrl, priority } = req.body;
+      const { reportedBy, branchId, unitId, assetId, category, location, description, photoUrl, priority } = req.body;
       const request = await MaintenanceService.createRequest({
         reportedBy,
         branchId,
+        unitId,
+        assetId,
         category,
         location,
         description,
@@ -253,8 +255,13 @@ export class MaintenanceController {
   public static spareParts = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const { technicianId, description } = req.body;
-      const request = await MaintenanceService.requestSpareParts(id, technicianId, description);
+      const { technicianId, description, itemId, itemName, quantity } = req.body;
+      const request = await MaintenanceService.requestSpareParts(id, technicianId, {
+        description: description || itemName || 'طلب قطع غيار',
+        itemId,
+        itemName,
+        quantity: quantity ? Number(quantity) : 1
+      });
       const response: ApiResponse = {
         success: true,
         data: request

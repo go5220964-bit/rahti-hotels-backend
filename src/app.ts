@@ -35,6 +35,7 @@ import { AuthController } from './controllers/auth.controller';
 import { verifyToken } from './middleware/auth.middleware';
 import { DocumentController } from './controllers/document.controller';
 import { HRController } from './controllers/hr.controller';
+import { UnitController } from './controllers/unit.controller';
 
 const app = express();
 
@@ -563,6 +564,19 @@ app.post('/api/documents/upload', DocumentController.upload);
 app.get('/api/documents', DocumentController.getAll);
 app.delete('/api/documents/:id', DocumentController.delete);
 
+// Unit & Asset OS API Routes (Transformation #1)
+app.get('/api/units', UnitController.getAllUnits);
+app.get('/api/units/:id', UnitController.getUnitById);
+app.get('/api/units/:id/health-card', UnitController.getUnitHealthCard);
+app.patch('/api/units/:id/status', UnitController.updateUnitStatus);
+app.post('/api/units', UnitController.createUnit);
+app.put('/api/units/:id', UnitController.updateUnit);
+app.delete('/api/units/:id', UnitController.deleteUnit);
+app.post('/api/units/assets', UnitController.createAsset);
+app.put('/api/units/assets/:id', UnitController.updateAsset);
+app.delete('/api/units/assets/:id', UnitController.deleteAsset);
+app.post('/api/units/seed', UnitController.seedBranchUnits);
+
 // Reports API Routes
 app.use('/api/reports', ReportsController);
 
@@ -576,6 +590,20 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`🚀 Rahti Hotels Operations Server is running on port ${PORT}`);
     console.log(`📡 WhatsApp Webhook URL: http://0.0.0.0:${PORT}/webhook`);
     console.log(`⚙️  Verify Token is set to: "${process.env.WEBHOOK_VERIFY_TOKEN}"`);
+
+    // Keep-Alive Ping to keep free Render / hosting instances awake (Transformation #5)
+    setInterval(async () => {
+      try {
+        const pingUrl = process.env.BACKEND_URL 
+          ? `${process.env.BACKEND_URL}/health` 
+          : `http://localhost:${PORT}/health`;
+        const axios = require('axios');
+        await axios.get(pingUrl);
+        console.log(`[Keep-Alive] Pinged ${pingUrl} successfully at ${new Date().toLocaleTimeString('ar-EG')}`);
+      } catch (err: any) {
+        // Silent catch
+      }
+    }, 10 * 60 * 1000); // Ping every 10 minutes
 
     // Start automated daily timer for group report (11:00 PM KSA = 23:00 KSA)
     setInterval(() => {

@@ -28,6 +28,7 @@ const auth_controller_1 = require("./controllers/auth.controller");
 const auth_middleware_1 = require("./middleware/auth.middleware");
 const document_controller_1 = require("./controllers/document.controller");
 const hr_controller_1 = require("./controllers/hr.controller");
+const unit_controller_1 = require("./controllers/unit.controller");
 const app = (0, express_1.default)();
 // Middleware
 // Global Request Logger Middleware for Webhook Diagnostics
@@ -501,6 +502,18 @@ app.patch('/api/damage/:id/waive', (0, validate_middleware_1.validate)(lostfound
 app.post('/api/documents/upload', document_controller_1.DocumentController.upload);
 app.get('/api/documents', document_controller_1.DocumentController.getAll);
 app.delete('/api/documents/:id', document_controller_1.DocumentController.delete);
+// Unit & Asset OS API Routes (Transformation #1)
+app.get('/api/units', unit_controller_1.UnitController.getAllUnits);
+app.get('/api/units/:id', unit_controller_1.UnitController.getUnitById);
+app.get('/api/units/:id/health-card', unit_controller_1.UnitController.getUnitHealthCard);
+app.patch('/api/units/:id/status', unit_controller_1.UnitController.updateUnitStatus);
+app.post('/api/units', unit_controller_1.UnitController.createUnit);
+app.put('/api/units/:id', unit_controller_1.UnitController.updateUnit);
+app.delete('/api/units/:id', unit_controller_1.UnitController.deleteUnit);
+app.post('/api/units/assets', unit_controller_1.UnitController.createAsset);
+app.put('/api/units/assets/:id', unit_controller_1.UnitController.updateAsset);
+app.delete('/api/units/assets/:id', unit_controller_1.UnitController.deleteAsset);
+app.post('/api/units/seed', unit_controller_1.UnitController.seedBranchUnits);
 // Reports API Routes
 app.use('/api/reports', reports_controller_1.default);
 // Centralized Error Handling Middleware
@@ -512,6 +525,20 @@ if (process.env.NODE_ENV !== 'test') {
         console.log(`🚀 Rahti Hotels Operations Server is running on port ${PORT}`);
         console.log(`📡 WhatsApp Webhook URL: http://0.0.0.0:${PORT}/webhook`);
         console.log(`⚙️  Verify Token is set to: "${process.env.WEBHOOK_VERIFY_TOKEN}"`);
+        // Keep-Alive Ping to keep free Render / hosting instances awake (Transformation #5)
+        setInterval(async () => {
+            try {
+                const pingUrl = process.env.BACKEND_URL
+                    ? `${process.env.BACKEND_URL}/health`
+                    : `http://localhost:${PORT}/health`;
+                const axios = require('axios');
+                await axios.get(pingUrl);
+                console.log(`[Keep-Alive] Pinged ${pingUrl} successfully at ${new Date().toLocaleTimeString('ar-EG')}`);
+            }
+            catch (err) {
+                // Silent catch
+            }
+        }, 10 * 60 * 1000); // Ping every 10 minutes
         // Start automated daily timer for group report (11:00 PM KSA = 23:00 KSA)
         setInterval(() => {
             try {

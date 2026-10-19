@@ -36,11 +36,30 @@ class MaintenanceService {
             const defaultBranch = await prisma_1.default.branch.findFirst();
             targetBranchId = defaultBranch?.id || '';
         }
+        let resolvedUnitId = data.unitId || null;
+        let resolvedAssetId = data.assetId || null;
+        // If unitId was not explicitly given, try matching location (e.g. "305", "شقة 305") with existing units
+        if (!resolvedUnitId && data.location) {
+            const cleanedRoom = data.location.replace(/[^0-9]/g, '');
+            if (cleanedRoom) {
+                const foundUnit = await prisma_1.default.unit.findFirst({
+                    where: {
+                        branchId: targetBranchId,
+                        unitNumber: cleanedRoom
+                    }
+                });
+                if (foundUnit) {
+                    resolvedUnitId = foundUnit.id;
+                }
+            }
+        }
         const request = (await prisma_1.default.maintenanceRequest.create({
             data: {
                 ticketNumber,
                 reportedBy: data.reportedBy,
                 branchId: targetBranchId,
+                unitId: resolvedUnitId,
+                assetId: resolvedAssetId,
                 category: data.category,
                 location: data.location,
                 description: data.description,
@@ -53,6 +72,16 @@ class MaintenanceService {
                 branch: true
             }
         }));
+        // Update linked Unit status to MaintenanceNeeded
+        if (resolvedUnitId) {
+            try {
+                await prisma_1.default.unit.update({
+                    where: { id: resolvedUnitId },
+                    data: { status: 'MaintenanceNeeded' }
+                });
+            }
+            catch (e) { }
+        }
         // Create "Created" timeline entry
         await prisma_1.default.maintenanceTimeline.create({
             data: {
@@ -231,6 +260,9 @@ class MaintenanceService {
      * Submits request completion, updates status to PendingInternalApproval, and notifies BranchManager/MaintenanceSupervisors.
      */
     static async submitCompletion(requestId, technicianId, completionNote, completionPhotoUrl) {
+        if (!completionPhotoUrl || completionPhotoUrl.trim() === '') {
+            throw new Error('إرفاق صورة بعد الإصلاح إلزامي، ولن يقبل النظام إغلاق البلاغ أو اعتماده بدونها.');
+        }
         const request = await prisma_1.default.maintenanceRequest.update({
             where: { id: requestId },
             data: {
@@ -284,7 +316,8 @@ class MaintenanceService {
         return request;
     }
     /**
-     * Approves completion, updates status to Closed, sets the technician as available, and notifies reporter/technician.
+     * Approves completion, updates status to Closed, sets the technician as available,
+     * restores Unit status to Available/Occupied, and notifies reporter/technician.
      */
     static async approveCompletion(requestId, approverId, supervisorNote) {
         const request = await prisma_1.default.maintenanceRequest.findUnique({
@@ -310,6 +343,30 @@ class MaintenanceService {
                 supervisorNote: supervisorNote || null
             }
         });
+        // Auto-update linked Unit status if no other active maintenance requests remain
+        if (request.unitId) {
+            try {
+                const remainingOpen = await prisma_1.default.maintenanceRequest.count({
+                    where: {
+                        unitId: request.unitId,
+                        id: { not: requestId },
+                        status: { notIn: ['Closed', 'Rejected'] }
+                    }
+                });
+                if (remainingOpen === 0) {
+                    const linkedUnit = await prisma_1.default.unit.findUnique({ where: { id: request.unitId } });
+                    if (linkedUnit && linkedUnit.status === 'MaintenanceNeeded') {
+                        await prisma_1.default.unit.update({
+                            where: { id: request.unitId },
+                            data: { status: linkedUnit.guestName ? 'Occupied' : 'Available' }
+                        });
+                    }
+                }
+            }
+            catch (err) {
+                console.error('Failed to update linked unit status on maintenance close:', err);
+            }
+        }
         await prisma_1.default.maintenanceTimeline.create({
             data: {
                 requestId,
@@ -374,31 +431,140 @@ class MaintenanceService {
         return updatedRequest;
     }
     /**
-     * Pauses request for spare parts and creates timeline entry.
+     * Transformation #2: Automated State Machine for Spare Parts & Warehouse.
+     * Auto-checks branch warehouse stock:
+     * - If available: Sets status 'PendingDispense' & creates WarehouseRequest
+     * - If stock is 0: Auto-generates urgent ProcurementRequest
      */
-    static async requestSpareParts(requestId, technicianId, description) {
-        const request = await prisma_1.default.maintenanceRequest.update({
+    static async requestSpareParts(requestId, technicianId, dataOrDescription) {
+        const desc = typeof dataOrDescription === 'string' ? dataOrDescription : dataOrDescription.description;
+        const rawItemId = typeof dataOrDescription === 'object' ? dataOrDescription.itemId : undefined;
+        const rawItemName = typeof dataOrDescription === 'object' ? (dataOrDescription.itemName || desc) : desc;
+        const qty = typeof dataOrDescription === 'object' && dataOrDescription.quantity ? dataOrDescription.quantity : 1;
+        const request = await prisma_1.default.maintenanceRequest.findUnique({
+            where: { id: requestId },
+            include: { branch: true }
+        });
+        if (!request) {
+            throw new Error('Maintenance request not found');
+        }
+        let matchedItem = null;
+        if (rawItemId) {
+            matchedItem = await prisma_1.default.item.findUnique({ where: { id: rawItemId } });
+        }
+        else {
+            matchedItem = await prisma_1.default.item.findFirst({
+                where: {
+                    name: { contains: rawItemName.trim(), mode: 'insensitive' }
+                }
+            });
+        }
+        let warehouseStatus = 'PendingDispense';
+        let procurementId = null;
+        let whRequestId = null;
+        let currentStock = 0;
+        if (matchedItem) {
+            const stockEntry = await prisma_1.default.stockEntry.findUnique({
+                where: {
+                    itemId_branchId: {
+                        itemId: matchedItem.id,
+                        branchId: request.branchId
+                    }
+                }
+            });
+            currentStock = stockEntry ? stockEntry.quantity : 0;
+        }
+        if (matchedItem && currentStock >= qty) {
+            // Stock is available in warehouse
+            warehouseStatus = 'PendingDispense';
+            const lastWhr = await prisma_1.default.warehouseRequest.findFirst({ orderBy: { createdAt: 'desc' } });
+            let nextWhrNum = 1;
+            if (lastWhr && lastWhr.ticketNumber) {
+                const parts = lastWhr.ticketNumber.split('-');
+                if (parts.length === 3) {
+                    const parsed = parseInt(parts[2], 10);
+                    if (!isNaN(parsed))
+                        nextWhrNum = parsed + 1;
+                }
+            }
+            const whrTicket = `WHR-2026-${String(nextWhrNum).padStart(4, '0')}`;
+            const whReq = await prisma_1.default.warehouseRequest.create({
+                data: {
+                    ticketNumber: whrTicket,
+                    requestedBy: technicianId,
+                    branchId: request.branchId,
+                    itemId: matchedItem.id,
+                    quantityRequested: qty,
+                    status: 'Pending',
+                    purpose: `طلب قطع غيار لبلاغ صيانة #${request.ticketNumber}`
+                }
+            });
+            whRequestId = whReq.id;
+        }
+        else {
+            // Stock is zero or not enough: auto-generate urgent ProcurementRequest
+            warehouseStatus = 'ProcurementCreated';
+            const lastPro = await prisma_1.default.procurementRequest.findFirst({ orderBy: { createdAt: 'desc' } });
+            let nextProNum = 1;
+            if (lastPro && lastPro.ticketNumber) {
+                const parts = lastPro.ticketNumber.split('-');
+                if (parts.length === 3) {
+                    const parsed = parseInt(parts[2], 10);
+                    if (!isNaN(parsed))
+                        nextProNum = parsed + 1;
+                }
+            }
+            const proTicket = `PRO-2026-${String(nextProNum).padStart(4, '0')}`;
+            const procurement = await prisma_1.default.procurementRequest.create({
+                data: {
+                    ticketNumber: proTicket,
+                    requestedBy: technicianId,
+                    branchId: request.branchId,
+                    itemId: matchedItem?.id || null,
+                    itemName: matchedItem?.name || rawItemName,
+                    quantityNeeded: qty,
+                    unit: matchedItem?.unit || 'قطعة',
+                    source: 'MaintenanceSpareParts',
+                    status: 'Pending',
+                    procurementNote: `طلب شراء عاجل آلي لبلاغ صيانة #${request.ticketNumber}: ${desc}`
+                }
+            });
+            procurementId = procurement.id;
+        }
+        const updatedRequest = await prisma_1.default.maintenanceRequest.update({
             where: { id: requestId },
             data: {
                 status: 'SpareParts',
-                sparePartsNeeded: true
+                sparePartsNeeded: true,
+                sparePartItemId: matchedItem?.id || null,
+                sparePartQuantity: qty,
+                warehouseStatus,
+                warehouseRequestId: whRequestId,
+                procurementId
             },
             include: { branch: true }
         });
+        const timelineNote = warehouseStatus === 'PendingDispense'
+            ? `طلب قطعة غيار (${rawItemName} × ${qty}) متوفرة بالمستودع (${currentStock}) - بانتظار تسليم المستودع`
+            : `طلب قطعة غيار (${rawItemName} × ${qty}) رصيد المستودع (0) - تم إنشاء أمر شراء عاجل آلياً #${procurementId}`;
         await prisma_1.default.maintenanceTimeline.create({
             data: {
                 requestId,
                 action: 'SparePartsRequested',
                 performedBy: technicianId,
-                note: `طلب قطع غيار: ${description}`
+                note: timelineNote
             }
         });
-        // Notify MaintenanceSupervisors
+        // Notify MaintenanceSupervisors & Warehouse/Procurement
         const supervisors = await prisma_1.default.user.findMany({
-            where: { role: 'MaintenanceSupervisor' }
+            where: { role: { in: ['MaintenanceSupervisor', 'BranchManager', 'Admin'] } }
         });
-        const supMsg = `⏸️ *البلاغ #${request.ticketNumber} موقوف لانتظار قطع غيار*\n\n` +
-            `📦 *التفاصيل*: ${description}\n\n` +
+        const statusBadge = warehouseStatus === 'PendingDispense'
+            ? `✅ القطعة متوفرة بالمستودع (الرصيد: ${currentStock}) - بانتظار الصرف`
+            : `⚠️ رصيد المستودع صفري! تم رفع طلب شراء عاجل آلياً إلى قسم المشتريات`;
+        const supMsg = `⏸️ *البلاغ #${request.ticketNumber} موقوف لقطع غيار*\n\n` +
+            `📦 *القطعة*: ${rawItemName} (الكمية: ${qty})\n` +
+            `📊 *حالة التوفر*: ${statusBadge}\n\n` +
             `[ ▶️ استئناف البلاغ ] (زر: resume_req_${request.id})`;
         for (const sup of supervisors) {
             if (sup.branchId && sup.branchId !== request.branchId) {
@@ -406,7 +572,7 @@ class MaintenanceService {
             }
             whatsapp_service_1.WhatsAppService.mockSendWhatsAppMessage(sup.phoneNumber, supMsg);
         }
-        return request;
+        return updatedRequest;
     }
     /**
      * Resumes request from SpareParts back to InProgress.

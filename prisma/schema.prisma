@@ -73,6 +73,7 @@ model Branch {
   documents        Document[]
   attendanceRecords AttendanceRecord[]
   receptionSchedules ReceptionSchedule[]
+  units               Unit[]
   transfersFrom       EmployeeTransfer[]   @relation("TransfersFrom")
   transfersTo         EmployeeTransfer[]   @relation("TransfersTo")
   loanRequests        LoanRequest[]
@@ -231,6 +232,10 @@ model MaintenanceRequest {
   reporter          User      @relation("ReportedBy", fields: [reportedBy], references: [id])
   branchId          String
   branch            Branch    @relation(fields: [branchId], references: [id])
+  unitId            String?
+  unit              Unit?                @relation(fields: [unitId], references: [id])
+  assetId           String?
+  asset             UnitAsset?           @relation(fields: [assetId], references: [id])
   category          MaintenanceCategory    // "Electrical"|"Plumbing"|"AC"|"Carpentry"|"Cleaning"|"General"
   location          String    // room number or place description
   description       String    @db.Text
@@ -250,6 +255,11 @@ model MaintenanceRequest {
   closedBy          String?   // BranchManager or InternalSupervisor userId
   supervisorNote    String?   @db.Text
   sparePartsNeeded  Boolean   @default(false)
+  sparePartItemId   String?
+  sparePartItem     Item?     @relation(fields: [sparePartItemId], references: [id])
+  sparePartQuantity Int?      @default(1)
+  warehouseStatus   String?   // "PendingDispense" | "Dispensed" | "ProcurementCreated"
+  warehouseRequestId String?
   procurementId     String?   // linked ProcurementRequest id (future)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -286,6 +296,7 @@ model Item {
   movements    StockMovement[]
   warehouseRequests WarehouseRequest[]
   procurementRequests ProcurementRequest[]
+  maintenanceRequests MaintenanceRequest[]
   createdAt    DateTime     @default(now())
 }
 
@@ -421,6 +432,10 @@ model DamageReport {
   reporter          User     @relation("DMGReportedBy", fields: [reportedBy], references: [id])
   branchId          String
   branch            Branch   @relation(fields: [branchId], references: [id])
+  unitId            String?
+  unit              Unit?    @relation(fields: [unitId], references: [id])
+  assetId           String?
+  asset             UnitAsset? @relation(fields: [assetId], references: [id])
   reservationRef    String?  // reservation number
   guestName         String?
   guestPhone        String?
@@ -798,4 +813,68 @@ model ReceptionSchedule {
   updatedAt    DateTime  @updatedAt
 
   @@unique([branchId, employeeId, date])
+}
+
+enum UnitStatus {
+  Available
+  Occupied
+  CleaningNeeded
+  CleaningInProgress
+  MaintenanceNeeded
+  OutOfService
+}
+
+enum UnitType {
+  Room
+  Studio
+  Apartment
+  OneBedroom
+  TwoBedroom
+  ThreeBedroom
+  Penthouse
+  Villa
+}
+
+model Unit {
+  id                  String               @id @default(cuid())
+  branchId            String
+  branch              Branch               @relation(fields: [branchId], references: [id])
+  unitNumber          String               // e.g. "101", "305"
+  floor               Int                  @default(1)
+  unitType            UnitType             @default(Apartment)
+  status              UnitStatus           @default(Available)
+  guestName           String?
+  guestPhone          String?
+  checkInDate         DateTime?
+  checkOutDate        DateTime?
+  nazeelReservationId String?
+  notes               String?              @db.Text
+  assets              UnitAsset[]
+  maintenanceRequests MaintenanceRequest[]
+  damageReports       DamageReport[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  @@unique([branchId, unitNumber])
+}
+
+model UnitAsset {
+  id                  String               @id @default(cuid())
+  unitId              String
+  unit                Unit                 @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  name                String               // e.g. "مكيف صالة اسبليت جري 24", "شاشة سامسونج 55", "سخان ماء الخزف السعودي"
+  category            String               // "AC" | "Electronics" | "Plumbing" | "Appliances" | "Furniture" | "Other"
+  brand               String?
+  modelNumber         String?
+  serialNumber        String?
+  purchaseDate        DateTime?
+  warrantyExpiry      DateTime?
+  installationDate    DateTime?
+  cost                Float?
+  status              String               @default("Working") // "Working" | "Faulty" | "UnderMaintenance" | "Replaced"
+  maintenanceRequests MaintenanceRequest[]
+  damageReports       DamageReport[]
+  notes               String?              @db.Text
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 }
